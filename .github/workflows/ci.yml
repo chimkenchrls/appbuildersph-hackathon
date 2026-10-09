@@ -44,6 +44,9 @@ jobs:
       - name: Type check
         run: npm run typecheck
 
+      - name: Test
+        run: npm test -- --runInBand
+
       - name: Check Expo dependency compatibility
         run: npm run check:dependencies
 

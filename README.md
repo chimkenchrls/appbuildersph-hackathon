@@ -28,9 +28,12 @@ Physical iPhones can use Expo Go during development.
 
 ## Files
 
-- `src/screens/HomeScreen.tsx`: starter screen; replace it when you choose an idea.
-- `App.tsx`: shared root and safe-area provider.
-- `index.ts`: Expo entry point.
+- `src/app/`: Expo Router routes; each one validates its parameters and renders a screen.
+- `src/screens/`: the dashboard, project workspace, ScopeGuard, and change proposal
+  screens. `.web.tsx` siblings keep the web export to a placeholder page.
+- `src/components/ui/` and `src/constants/theme.ts`: shared components and the Mint Slate tokens.
+- `src/features/`, `src/services/`, `src/safety/`: hooks, service contracts, labeled
+  fixtures, and validation. The fixtures are in-memory and reset when the app restarts.
 - `app.json`: app name, platforms, and web configuration.
 - `eas.json`: native preview and production build profiles.
 
@@ -40,7 +43,9 @@ Add reusable components under `src/components/` and business logic under
 ## Checks and web export
 
 ```sh
+npm run lint
 npm run typecheck
+npm test
 npm run check:dependencies
 npm run build:web
 ```

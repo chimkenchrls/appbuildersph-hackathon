@@ -4,7 +4,7 @@
     "slug": "diligent-dev",
     "scheme": "diligent-dev",
     "version": "1.0.0",
-    "userInterfaceStyle": "light",
+    "userInterfaceStyle": "dark",
     "experiments": {
       "typedRoutes": true
     },
@@ -18,7 +18,8 @@
     "plugins": [
       "expo-router",
       "expo-status-bar",
-      "expo-sqlite"
+      "expo-sqlite",
+      "@react-native-vector-icons/lucide"
     ]
   }
 }
