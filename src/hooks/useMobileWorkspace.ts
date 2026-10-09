@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { initializeBackendAsync, type AppServices } from '@/services/bootstrapService';
 import type { RootTab } from '@/components/BottomNavBar';
-import { LLMEngineUnavailableError, LLMGenerationTimeoutError, LLMParseError } from '@/llm/contracts';
+import { LLMContextOverflowError, LLMEngineUnavailableError, LLMGenerationTimeoutError, LLMParseError } from '@/llm/contracts';
 import { ScopeDraftSchema } from '@/types/schemas';
 import { AgreementSchema } from '@/safety/persistedSchemas';
 import { routeId, newId } from '@/utils/ids';
@@ -117,6 +117,7 @@ export function useMobileWorkspace() {
 
   const inference = async <T,>(action: () => Promise<T>) => {
     try { return await action(); } catch (reason) {
+      if (reason instanceof LLMContextOverflowError) throw new ServiceError('input_too_long');
       if (reason instanceof LLMGenerationTimeoutError) throw new ServiceError('generation_timeout');
       if (reason instanceof LLMEngineUnavailableError) throw new ServiceError('model_unavailable');
       if (reason instanceof LLMParseError) throw new ServiceError('invalid_output');

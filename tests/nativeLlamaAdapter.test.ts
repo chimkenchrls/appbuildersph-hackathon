@@ -1,34 +1,51 @@
 import { NativeLlamaAdapter, type NativeLlamaConfig } from '@/llm/adapters/nativeLlamaAdapter';
 import { HybridLlmAdapter } from '@/llm/adapters/hybridLlmAdapter';
 import { LMStudioAdapter } from '@/llm/adapters/lmStudioAdapter';
-import { LLMEngineUnavailableError } from '@/llm/contracts';
+import { LLMContextOverflowError, LLMEngineUnavailableError } from '@/llm/contracts';
 
 jest.mock('expo-file-system/legacy', () => {
-  let mockFiles: Record<string, { size: number; exists: boolean }> = {};
+  let mockFiles: Record<string, { size: number; exists: boolean; header?: string }> = {};
+  let freeBytes = 64 * 1024 * 1024 * 1024;
   return {
     documentDirectory: 'file:///mock/documents/',
+    cacheDirectory: 'file:///mock/cache/',
     getInfoAsync: jest.fn(async (uri: string) => {
       if (mockFiles[uri]) {
         return { exists: true, size: mockFiles[uri].size, isDirectory: false };
       }
       return { exists: false, isDirectory: false };
     }),
+    getFreeDiskStorageAsync: jest.fn(async () => freeBytes),
     readDirectoryAsync: jest.fn(async (dirUri: string) => {
       return Object.keys(mockFiles)
         .filter((k) => k.startsWith(dirUri))
         .map((k) => k.replace(dirUri, ''));
     }),
+    readAsStringAsync: jest.fn(async (uri: string) => {
+      // First four bytes of the file, base64 encoded. "GGUF" is R0dVRg==.
+      return mockFiles[uri]?.header ?? 'R0dVRg==';
+    }),
     copyAsync: jest.fn(async ({ from, to }: { from: string; to: string }) => {
-      mockFiles[to] = mockFiles[from] || { size: 1024 * 1024 * 500, exists: true };
+      mockFiles[to] = { ...(mockFiles[from] || { size: 1024 * 1024 * 500, exists: true }) };
+    }),
+    moveAsync: jest.fn(async ({ from, to }: { from: string; to: string }) => {
+      mockFiles[to] = mockFiles[from];
+      delete mockFiles[from];
     }),
     deleteAsync: jest.fn(async (uri: string) => {
       delete mockFiles[uri];
     }),
-    __setMockFiles: (files: Record<string, { size: number; exists: boolean }>) => {
+    __setMockFiles: (files: Record<string, { size: number; exists: boolean; header?: string }>) => {
       mockFiles = { ...files };
+    },
+    __hasFile: (uri: string) => uri in mockFiles,
+    __listFiles: () => Object.keys(mockFiles),
+    __setFreeBytes: (bytes: number) => {
+      freeBytes = bytes;
     },
     __clearMockFiles: () => {
       mockFiles = {};
+      freeBytes = 64 * 1024 * 1024 * 1024;
     },
   };
 });
@@ -269,5 +286,142 @@ describe('HybridLlmAdapter', () => {
     await hybridAdapter.setMode('on_device');
     expect(currentMode).toBe('on_device');
     expect(await hybridAdapter.getMode()).toBe('on_device');
+  });
+});
+
+describe('NativeLlamaAdapter limits and safety', () => {
+  const fsMock = require('expo-file-system/legacy');
+  const DOCS = 'file:///mock/documents/';
+  const completionRequest = () => (mockCompletion.mock.calls as unknown as Array<[{ n_predict: number }]>)[0][0];
+  const model = (name = 'model.gguf') => ({ [`${DOCS}${name}`]: { size: 1024 * 1024 * 500, exists: true } });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    fsMock.__clearMockFiles();
+  });
+
+  describe('context budget', () => {
+    test('rejects a prompt that cannot fit and never calls the model', async () => {
+      fsMock.__setMockFiles(model());
+      const adapter = createAdapter({ nCtx: 2048 });
+      // 15,000 characters is the app's longest accepted conversation.
+      const long = 'a'.repeat(15000);
+
+      await expect(adapter.generate([{ role: 'user', content: long }])).rejects.toThrow(LLMContextOverflowError);
+      expect(mockCompletion).not.toHaveBeenCalled();
+    });
+
+    test('shrinks the output allowance so prompt and output fit the context', async () => {
+      fsMock.__setMockFiles(model());
+      const adapter = createAdapter({ nCtx: 2048 });
+      // About 1,200 tokens of prompt: fits, but not alongside the default 1,500 output tokens.
+      await adapter.generate([{ role: 'user', content: 'a'.repeat(3600) }], { maxTokens: 1500 });
+
+      const request = completionRequest();
+      expect(request.n_predict).toBeLessThan(1500);
+      expect(request.n_predict).toBeGreaterThanOrEqual(256);
+    });
+
+    test('leaves a short prompt at the requested output allowance', async () => {
+      fsMock.__setMockFiles(model());
+      const adapter = createAdapter({ nCtx: 4096 });
+      await adapter.generate([{ role: 'user', content: 'Short request' }], { maxTokens: 800 });
+
+      expect(completionRequest().n_predict).toBe(800);
+    });
+  });
+
+  describe('serialized access', () => {
+    test('concurrent generations load the model once and never overlap', async () => {
+      fsMock.__setMockFiles(model());
+      let running = 0;
+      let peak = 0;
+      mockCompletion.mockImplementation(async () => {
+        running += 1;
+        peak = Math.max(peak, running);
+        await new Promise((resolve) => setTimeout(resolve, 20));
+        running -= 1;
+        return { text: 'ok', timings: {} } as never;
+      });
+
+      const adapter = createAdapter();
+      const results = await Promise.all([
+        adapter.generate([{ role: 'user', content: 'one' }]),
+        adapter.generate([{ role: 'user', content: 'two' }]),
+        adapter.generate([{ role: 'user', content: 'three' }]),
+      ]);
+
+      expect(results).toEqual(['ok', 'ok', 'ok']);
+      expect(mockInitLlama).toHaveBeenCalledTimes(1);
+      expect(peak).toBe(1);
+    });
+
+    test('a failed generation does not block the next one', async () => {
+      fsMock.__setMockFiles(model());
+      mockCompletion.mockImplementationOnce(async () => {
+        throw new Error('native failure');
+      });
+      const adapter = createAdapter();
+
+      await expect(adapter.generate([{ role: 'user', content: 'first' }])).rejects.toThrow('native failure');
+      mockCompletion.mockImplementation(async () => ({ text: 'recovered', timings: {} }) as never);
+      await expect(adapter.generate([{ role: 'user', content: 'second' }])).resolves.toBe('recovered');
+    });
+  });
+
+  describe('model import', () => {
+    const SOURCE = 'file:///mock/cache/picked.gguf';
+
+    test('keeps the existing model when the new file is not a GGUF', async () => {
+      fsMock.__setMockFiles({
+        ...model(),
+        [SOURCE]: { size: 1024 * 1024 * 600, exists: true, header: 'UEsDBA==' },
+      });
+      const adapter = createAdapter();
+
+      await expect(adapter.importModel(SOURCE, 'model.gguf')).rejects.toThrow(/GGUF/);
+      expect(fsMock.__hasFile(`${DOCS}model.gguf`)).toBe(true);
+      expect(fsMock.__listFiles().some((uri: string) => uri.endsWith('.partial'))).toBe(false);
+    });
+
+    test('keeps the existing model when the copy fails', async () => {
+      fsMock.__setMockFiles({ ...model(), [SOURCE]: { size: 1024 * 1024 * 600, exists: true } });
+      fsMock.copyAsync.mockRejectedValueOnce(new Error('disk error'));
+      const adapter = createAdapter();
+
+      await expect(adapter.importModel(SOURCE, 'model.gguf')).rejects.toThrow('disk error');
+      expect(fsMock.__hasFile(`${DOCS}model.gguf`)).toBe(true);
+    });
+
+    test('refuses an import that does not fit in free storage, before copying', async () => {
+      fsMock.__setMockFiles({ [SOURCE]: { size: 1024 * 1024 * 1024 * 2, exists: true } });
+      fsMock.__setFreeBytes(1024 * 1024 * 1024);
+      const adapter = createAdapter();
+
+      await expect(adapter.importModel(SOURCE, 'big.gguf')).rejects.toThrow(/storage/i);
+      expect(fsMock.copyAsync).not.toHaveBeenCalled();
+    });
+
+    test.each([
+      ['../../evil.gguf', 'evil.gguf'],
+      ['..\\..\\evil.gguf', 'evil.gguf'],
+      ['not-a-model.txt', 'model.gguf'],
+      ['', 'model.gguf'],
+    ])('stores %p inside the app folder as %p', async (given, expected) => {
+      fsMock.__setMockFiles({ [SOURCE]: { size: 1024 * 1024 * 600, exists: true } });
+      const adapter = createAdapter();
+
+      const imported = await adapter.importModel(SOURCE, given);
+      expect(imported.path).toBe(`${DOCS}${expected}`);
+    });
+
+    test('removes the cached staging copy after a successful import', async () => {
+      fsMock.__setMockFiles({ [SOURCE]: { size: 1024 * 1024 * 600, exists: true } });
+      const adapter = createAdapter();
+
+      await adapter.importModel(SOURCE, 'picked.gguf');
+      expect(fsMock.__hasFile(`${DOCS}picked.gguf`)).toBe(true);
+      expect(fsMock.__hasFile(SOURCE)).toBe(false);
+    });
   });
 });
