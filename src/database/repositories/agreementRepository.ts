@@ -1,4 +1,5 @@
 import { AgreementSchema, stored, storedJson } from '@/safety/persistedSchemas';
+import { limits, textValue } from '@/safety/validation';
 import { ServiceError } from '@/services/errors';
 import { transaction } from '@/database/transaction';
 import type { SQLiteDatabase } from 'expo-sqlite';
@@ -40,6 +41,14 @@ export class AgreementRepository {
   async createInitial(agreement: Agreement): Promise<Agreement> {
     if (!this.inTransaction) return transaction(this.db, tx => new AgreementRepository(tx, true).createInitial(agreement));
     if (agreement.versionNumber !== 1 || await this.getLatestByProjectId(agreement.projectId)) throw new ServiceError('save_failed');
+    return this.create(agreement);
+  }
+
+  /** Only extend the current baseline; concurrent or stale acceptances must not overwrite it. */
+  async createRevision(agreement: Agreement, previousAgreementId: string): Promise<Agreement> {
+    if (!this.inTransaction) return transaction(this.db, tx => new AgreementRepository(tx, true).createRevision(agreement, previousAgreementId));
+    const latest = await this.getLatestByProjectId(agreement.projectId);
+    if (!latest || latest.id !== previousAgreementId || agreement.versionNumber !== latest.versionNumber + 1) throw new ServiceError('conflict');
     return this.create(agreement);
   }
 
@@ -174,11 +183,16 @@ export class AgreementRepository {
     signatureData?: string,
   ): Promise<void> {
     const now = new Date().toISOString();
-    await this.db.runAsync(
+    const name = textValue(signatoryName, limits.item);
+    const checked = AgreementSchema.pick({ clientApprovedAt: true, clientSignatoryName: true, clientSignatureData: true })
+      .safeParse({ clientApprovedAt: now, clientSignatoryName: name, clientSignatureData: signatureData ?? null });
+    if (!checked.success) throw new ServiceError('invalid_input');
+    const result = await this.db.runAsync(
       `UPDATE agreements
        SET client_approved_at = ?, client_signatory_name = ?, client_signature_data = ?
        WHERE id = ?;`,
-      [now, signatoryName, signatureData || null, agreementId],
+      [now, name, checked.data.clientSignatureData ?? null, agreementId],
     );
+    if (!result.changes) throw new ServiceError('not_found');
   }
 }

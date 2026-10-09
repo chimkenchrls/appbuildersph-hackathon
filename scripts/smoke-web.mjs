@@ -100,6 +100,9 @@ async function waitUntilReady() {
 const ASSETS = [
   { path: '/mascots/kwagi-directions.webp', type: 'image/webp', magic: (b) => b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP' },
   { path: '/mascots/kwagi-reactions.webp', type: 'image/webp', magic: (b) => b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP' },
+  ...['draft', 'agreement', 'scopeguard', 'proposal'].map((name) => ({
+    path: `/app/${name}.webp`, type: 'image/webp', magic: (b) => b.subarray(0, 4).toString('latin1') === 'RIFF' && b.subarray(8, 12).toString('latin1') === 'WEBP',
+  })),
   { path: '/fonts/Geist-Variable.woff2', type: 'font/woff2', magic: (b) => b.subarray(0, 4).toString('latin1') === 'wOF2' },
   { path: '/fonts/GeistMono-Variable.woff2', type: 'font/woff2', magic: (b) => b.subarray(0, 4).toString('latin1') === 'wOF2' },
   { path: '/favicon.png', type: 'image/png', magic: (b) => b.subarray(1, 4).toString('latin1') === 'PNG' },
@@ -198,6 +201,21 @@ async function browserChecks() {
       const line = await page.locator('.lp-says [aria-live]').innerText();
       expect(line.trim().length > 10, 'the bubble has no text');
       return 'bubble opens with his first line';
+    });
+
+    await check('every app screen loads in the How it works stage', async () => {
+      const steps = page.locator('.lp-step button');
+      const count = await steps.count();
+      expect(count === 4, `found ${count} steps`);
+      await page.locator('#how').scrollIntoViewIfNeeded();
+      for (let index = 0; index < count; index += 1) {
+        await steps.nth(index).click();
+        const shown = page.locator('.lp-stage-slide[data-active="true"] img');
+        await shown.waitFor({ state: 'visible', timeout: 5000 });
+        const ok = await shown.evaluate((node) => node.complete && node.naturalWidth > 0);
+        expect(ok, `the screen for step ${index + 1} did not load`);
+      }
+      return '4 steps, each screen loaded';
     });
 
     await check('no script errors on the page', () => {

@@ -7,7 +7,7 @@ import { SettingsRepository } from './settingsRepository';
 
 export function repositories(db: SQLiteDatabase, inTransaction = false) {
   return {
-    project: new ProjectRepository(db),
+    project: new ProjectRepository(db, inTransaction),
     agreement: new AgreementRepository(db, inTransaction),
     scopeGuard: new ScopeGuardRepository(db, inTransaction),
     proposal: new ProposalRepository(db),

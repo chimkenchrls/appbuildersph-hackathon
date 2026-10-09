@@ -67,7 +67,10 @@ const lightColors = {
 } as const;
 
 // Preserve the existing web landing tokens while using staging's mobile palette.
-export const colors = Platform.OS === 'web' ? { ...lightColors,
+// A screenshot build (scripts/capture-app-screens.mjs) keeps the mobile palette on web.
+const screenshotBuild = process.env.EXPO_PUBLIC_APP_SCREENSHOTS === '1';
+
+export const colors = Platform.OS === 'web' && !screenshotBuild ? { ...lightColors,
   background: '#0B1214',
   surface: '#111C1F',
   surfaceRaised: '#1A2A2E',

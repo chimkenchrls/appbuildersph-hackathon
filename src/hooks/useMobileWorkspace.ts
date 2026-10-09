@@ -4,7 +4,7 @@ import { initializeBackendAsync, type AppServices } from '@/services/bootstrapSe
 import type { RootTab } from '@/components/BottomNavBar';
 import { LLMEngineUnavailableError, LLMGenerationTimeoutError, LLMParseError } from '@/llm/contracts';
 import { ScopeDraftSchema } from '@/types/schemas';
-import { AgreementSchema } from '@/safety/persistedSchemas';
+import { KasunduanVaultService } from '@/services/kasunduanVaultService';
 import { routeId, newId } from '@/utils/ids';
 import { ServiceError, errorMessage } from '@/services/errors';
 import { limits, textValue } from '@/safety/validation';
@@ -109,8 +109,7 @@ export function useMobileWorkspace() {
     if (!checked.requirements.some(requirement => requirement.category === 'deliverable')) throw new ServiceError('invalid_input');
     const result = await services.transaction(async repos => {
       await repos.project.update(project.id, { draftScopeJson: JSON.stringify(checked) });
-      return repos.agreement.createInitial(AgreementSchema.parse({ ...checked, id: newId('agmt'),
-        projectId: project.id, versionNumber: 1, confirmedAt: new Date().toISOString() }));
+      return new KasunduanVaultService(repos.agreement).confirmScope(project.id, checked, checked.title);
     });
     navigate('overview', project.id, { agreementId: result.id });
   };

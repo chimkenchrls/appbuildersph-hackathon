@@ -30,7 +30,7 @@ export interface ProposalScreenProps {
     selectedItems?: string[],
     fee?: number | null,
     days?: number | null,
-  ) => void;
+  ) => Promise<void> | void;
 }
 
 export function ProposalEditorScreen({
@@ -75,6 +75,7 @@ export function ProposalEditorScreen({
 
   const [feedback, setFeedback] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState<boolean>(false);
+  const [isAccepting, setIsAccepting] = useState(false);
 
   // Dynamic agreement label (e.g. Agreement v2)
   const agreementLabel = agreement
@@ -111,7 +112,7 @@ export function ProposalEditorScreen({
       return true;
     } catch (reason) { setFeedback(errorMessage(reason)); return false; }
   };
-  const guardedBack = useExitGuard({ blocked: isSaving || formKey !== savedKey, parent: '/', prepare: persist, retrySave: true });
+  const guardedBack = useExitGuard({ blocked: isSaving || isAccepting || formKey !== savedKey, parent: '/', prepare: persist, retrySave: true });
 
   const handleSaveDraft = async () => {
     if (isSaving) return;
@@ -259,7 +260,7 @@ export function ProposalEditorScreen({
           </View>
 
           <Text style={styles.estimatesHelper}>
-            Your estimates. Saklaw does not set your rates.
+            Your estimates. OwlSet does not set your rates.
           </Text>
         </View>
 
@@ -324,21 +325,22 @@ export function ProposalEditorScreen({
                 pressed && styles.acceptButtonPressed,
               ]}
               onPress={async () => {
-                await hapticSuccess();
-                const fee = feeEstimate.trim()
-                  ? parseInt(feeEstimate.replace(/[^0-9]/g, ''), 10)
-                  : null;
-                const days = daysEstimate.trim()
-                  ? parseInt(daysEstimate.replace(/[^0-9]/g, ''), 10)
-                  : null;
-                onAcceptProposal(selectedItems, fee, days);
+                if (isAccepting || isSaving) return;
+                setIsAccepting(true);
+                try {
+                  await onAcceptProposal(selectedItems, parseEstimate(feeEstimate), parseWorkingDays(daysEstimate));
+                  setSavedKey(formKey);
+                  await hapticSuccess();
+                } catch (reason) { setFeedback(errorMessage(reason)); }
+                finally { setIsAccepting(false); }
               }}
+              disabled={isAccepting || isSaving}
               accessibilityRole="button"
               accessibilityLabel="Accept scope change and seal new agreement"
             >
               <AppIcon name="check" size={18} color="#FFFFFF" />
               <Text style={styles.acceptButtonText}>
-                Accept Scope Change (Agreed with client)
+                {isAccepting ? 'Sealing agreement...' : 'Accept Scope Change (Agreed with client)'}
               </Text>
             </Pressable>
           )}
@@ -349,7 +351,7 @@ export function ProposalEditorScreen({
               pressed && styles.saveButtonPressed,
             ]}
             onPress={handleSaveDraft}
-            disabled={isSaving}
+            disabled={isSaving || isAccepting}
             accessibilityRole="button"
             accessibilityLabel="Save draft"
           >

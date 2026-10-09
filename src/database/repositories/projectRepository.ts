@@ -1,9 +1,11 @@
 import { ProjectSchema, stored } from '@/safety/persistedSchemas';
+import { transaction } from '@/database/transaction';
+import { draftKey } from '@/safety/scopeDraft';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { Project } from '@/types/domain';
 
 export class ProjectRepository {
-  constructor(private readonly db: SQLiteDatabase) {}
+  constructor(private readonly db: SQLiteDatabase, private readonly inTransaction = false) {}
 
   async create(data: { id: string; title: string; clientName?: string | null; description?: string | null; draftScopeJson?: string | null }): Promise<Project> {
     const now = new Date().toISOString();
@@ -117,43 +119,8 @@ export class ProjectRepository {
     };
   }
 
-  async cleanupDuplicates(): Promise<number> {
-    const allProjects = await this.list();
-    const seen = new Map<string, Project>();
-    let deletedCount = 0;
-
-    for (const p of allProjects) {
-      const key = p.title.trim().toLowerCase();
-      if (!seen.has(key)) {
-        seen.set(key, p);
-      } else {
-        const existing = seen.get(key)!;
-        // Check if existing or current has agreements
-        const existingAgreements = await this.db.getAllAsync<{ id: string }>(
-          'SELECT id FROM agreements WHERE project_id = ? LIMIT 1;',
-          [existing.id],
-        );
-        const currentAgreements = await this.db.getAllAsync<{ id: string }>(
-          'SELECT id FROM agreements WHERE project_id = ? LIMIT 1;',
-          [p.id],
-        );
-
-        let projectToDeleteId = p.id;
-        if (existingAgreements.length === 0 && currentAgreements.length > 0) {
-          // Keep current (it has agreements), delete existing
-          projectToDeleteId = existing.id;
-          seen.set(key, p);
-        }
-
-        await this.delete(projectToDeleteId);
-        deletedCount++;
-      }
-    }
-
-    return deletedCount;
-  }
-
   async delete(id: string): Promise<boolean> {
+    if (!this.inTransaction) return transaction(this.db, tx => new ProjectRepository(tx, true).delete(id));
     // Delete in reverse dependency order to avoid foreign key restrict errors
     await this.db.runAsync('DELETE FROM change_proposals WHERE project_id = ?;', [id]);
     await this.db.runAsync(
@@ -166,6 +133,7 @@ export class ProjectRepository {
       [id],
     );
     await this.db.runAsync('DELETE FROM agreements WHERE project_id = ?;', [id]);
+    await this.db.runAsync('DELETE FROM app_settings WHERE key IN (?, ?);', [draftKey(id), `saklaw_source:${id}`]);
     const result = await this.db.runAsync('DELETE FROM projects WHERE id = ?;', [id]);
     return result.changes > 0;
   }
