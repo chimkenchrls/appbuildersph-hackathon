@@ -14,7 +14,7 @@
     "build:web": "expo export --platform web",
     "check:dependencies": "expo install --check",
     "lint": "expo lint",
-    "test": "node --experimental-strip-types --test \"tests/unit/**/*.test.ts\""
+    "test": "jest"
   },
   "engines": {
     "node": ">=22.13.0"
@@ -24,6 +24,7 @@
     "@react-native-vector-icons/lucide": "^13.1.4",
     "expo": "~57.0.27",
     "expo-build-properties": "~57.0.22",
+    "expo-clipboard": "~57.0.2",
     "expo-constants": "~57.0.21",
     "expo-dev-client": "~57.0.19",
     "expo-linking": "~57.0.12",
