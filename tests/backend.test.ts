@@ -307,6 +307,33 @@ describe('AI routed through the backend engine', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(ai.getStatus()).not.toBe('busy');
   });
+
+  test('simultaneous AI callers cannot start two generations while backend initialization is pending', async () => {
+    let finish!: (value: string) => void;
+    let generations = 0;
+    const { data, agreement } = await confirmed({ isAvailable: async () => true, generate: async () => '{}' });
+    const { ports } = fakePorts({
+      isAvailable: async () => true,
+      generate: () => {
+        generations++;
+        return new Promise<string>(resolve => { finish = resolve; });
+      },
+    });
+    ports.agreements.getById = async () => ({ ...toBackendDraft('Test', manualDraft(agreement.projectId)),
+      id: agreement.id, projectId: agreement.projectId, versionNumber: 1, confirmedAt: agreement.confirmedAt });
+    let ready!: (ports: BackendPorts) => void;
+    const pending = new Promise<BackendPorts>(resolve => { ready = resolve; });
+    const ai = createBackendAi(() => pending);
+    const first = ai.analyzeRequest(agreement, 'Add booking', never).catch(error => error);
+    const second = ai.analyzeRequest(agreement, 'Add a dashboard', never).catch(error => error);
+    ready(ports);
+    await new Promise(resolve => setTimeout(resolve, 0));
+    expect(generations).toBe(1);
+    expect(await second).toMatchObject({ code: 'model_unavailable' });
+    finish(analysisJson(['REQ-02']));
+    expect(await first).toEqual(expect.any(Array));
+    expect(await data.listAnalyses(agreement.projectId)).toHaveLength(0);
+  });
 });
 
 test('a mismatched stored request/agreement reports integrity failure', async () => {

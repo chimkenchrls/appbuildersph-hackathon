@@ -36,6 +36,8 @@ export const AgreementSchema = z.object({
 export const PersistedDraftSchema = AgreementSchema.omit({ id: true, projectId: true, versionNumber: true, confirmedAt: true, clientApprovedAt: true, clientSignatoryName: true, clientSignatureData: true }).extend({
   requirements: z.array(AgreementSchema.shape.requirements.element).max(limits.items + 1)
     .refine(rows => new Set(rows.map(row => row.id)).size === rows.length),
+  sourceConversation: text(limits.source).optional(),
+  extractedWithAi: z.boolean().optional(),
 });
 export const RequestSchema = z.object({ id, projectId: id, agreementId: id, rawText: nonempty(limits.request), createdAt: date,
   status: z.enum(['stored', 'analyzed', 'accepted']).optional(), acceptedAt: date.nullable().optional() }).strict();

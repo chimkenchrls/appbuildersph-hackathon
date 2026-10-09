@@ -8,6 +8,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { initializeBackendAsync, type AppServices } from '@/services/bootstrapService';
+import { KasunduanVaultService } from '@/services/kasunduanVaultService';
+import { ServiceError } from '@/services/errors';
 import { getDatabaseAsync } from '@/database/client';
 import { seedDemoDataAsync } from '@/database/seed';
 import { colors } from '@/constants/theme';
@@ -79,8 +81,6 @@ export function HomeScreen() {
     async function initialize() {
       try {
         const backend = await initializeBackendAsync();
-        // Clean up duplicate projects if any exist in the database
-        await backend.repositories.project.cleanupDuplicates();
         const loadedProjects = await backend.repositories.project.list();
 
         const agreementsMap: Record<string, Agreement[]> = {};
@@ -643,26 +643,24 @@ export function HomeScreen() {
     signatoryName?: string | null,
     approvalNotes?: string | null,
   ) => {
-    if (!services || !activeProject) return;
+    if (!services || !activeProject) throw new ServiceError('not_found');
     const targetAgreement = activeAgreement || activeAgreements[0];
-    if (!targetAgreement) return;
+    if (!targetAgreement) throw new ServiceError('not_found');
 
     try {
-      const nextAgmt = await services.services.kasunduanVault.acceptScopeChange({
-        projectId: activeProject.id,
-        currentAgreement: targetAgreement,
-        additionalDeliverables: additions,
-        additionalFee: additionalFee ?? undefined,
-        additionalDays: additionalDays ?? undefined,
-        clientSignatoryName: signatoryName || undefined,
-        clientSignatureData: approvalNotes || undefined,
+      const nextAgmt = await services.transaction(async repos => {
+        const storedRequest = await repos.scopeGuard.getRequestById(request.id);
+        if (!storedRequest || storedRequest.projectId !== activeProject.id) throw new ServiceError('not_found');
+        if (storedRequest.status === 'accepted') throw new ServiceError('conflict');
+        const next = await new KasunduanVaultService(repos.agreement).acceptScopeChange({
+          projectId: activeProject.id, currentAgreement: targetAgreement,
+          additionalDeliverables: additions, additionalFee: additionalFee ?? undefined,
+          additionalDays: additionalDays ?? undefined,
+          clientSignatoryName: signatoryName || undefined, clientSignatureData: approvalNotes || undefined,
+        });
+        await repos.scopeGuard.updateRequestStatus(request.id, 'accepted', new Date().toISOString());
+        return next;
       });
-
-      await services.repositories.scopeGuard.updateRequestStatus(
-        request.id,
-        'accepted',
-        new Date().toISOString(),
-      );
 
       setProjectAgreements((prev) => ({
         ...prev,
@@ -670,8 +668,20 @@ export function HomeScreen() {
       }));
       setSelectedAgreement(nextAgmt);
       await refreshProjectRequests(activeProject.id);
-    } catch {
-      // ignore
+    } catch (reason) {
+      throw reason instanceof ServiceError ? reason : new ServiceError('save_failed');
+    }
+  };
+
+  const handleResolveExclusionConflicts = async () => {
+    if (!services || !activeAgreement) throw new ServiceError('not_found');
+    try {
+      const next = await new KasunduanVaultService(services.repositories.agreement)
+        .resolveExclusionConflicts(activeProject.id, activeAgreement);
+      setProjectAgreements(previous => ({ ...previous, [activeProject.id]: [next, ...(previous[activeProject.id] || [])] }));
+      setSelectedAgreement(next);
+    } catch (reason) {
+      throw reason instanceof ServiceError ? reason : new ServiceError('save_failed');
     }
   };
 
@@ -730,44 +740,16 @@ export function HomeScreen() {
     fee?: number | null,
     days?: number | null,
   ) => {
-    if (!services || !activeProject) return;
-    const targetAgreement = activeAgreement || activeAgreements[0];
-    if (!targetAgreement) return;
+    if (!services || !activeProject || !analysis) throw new ServiceError('not_found');
 
-    const additionsToInclude =
-      selectedItems && selectedItems.length > 0
-        ? selectedItems
-        : proposal?.selectedItems && proposal.selectedItems.length > 0
-        ? proposal.selectedItems
-        : ['Additional client requested deliverables'];
-
-    try {
-      const nextAgmt = await services.services.kasunduanVault.acceptScopeChange({
-        projectId: activeProject.id,
-        currentAgreement: targetAgreement,
-        additionalDeliverables: additionsToInclude,
-        additionalFee: fee ?? (proposal?.freelancerFeeEstimate ?? undefined),
-        additionalDays: days ?? (proposal?.freelancerDaysEstimate ?? undefined),
-      });
-
-      if (analysis?.requestId) {
-        await services.repositories.scopeGuard.updateRequestStatus(
-          analysis.requestId,
-          'accepted',
-          new Date().toISOString(),
-        );
-      }
-
-      setProjectAgreements((prev) => ({
-        ...prev,
-        [activeProject.id]: [nextAgmt, ...(prev[activeProject.id] || [])],
-      }));
-      setSelectedAgreement(nextAgmt);
-      await refreshProjectRequests(activeProject.id);
-      navigateToSubScreen('overview', 'backward');
-    } catch {
-      navigateToSubScreen('overview', 'backward');
-    }
+    if (proposal && proposal.analysisId !== analysis.id) throw new ServiceError('not_found');
+    const additionsToInclude = selectedItems ?? proposal?.selectedItems ?? [];
+    const request = await services.repositories.scopeGuard.getRequestById(analysis.requestId);
+    if (!request) throw new ServiceError('not_found');
+    await handleAcceptRequest(request, additionsToInclude,
+      fee === undefined ? proposal?.freelancerFeeEstimate ?? null : fee,
+      days === undefined ? proposal?.freelancerDaysEstimate ?? null : days);
+    navigateToSubScreen('overview', 'backward');
   };
 
   const handleDataReset = async () => {
@@ -865,6 +847,7 @@ export function HomeScreen() {
               onNavigateToNewRequest={() => navigateToSubScreen('new_request', 'forward')}
               onReviewRequest={handleReviewStoredRequest}
               onAcceptRequest={handleAcceptRequest}
+              onResolveExclusionConflicts={handleResolveExclusionConflicts}
               onRecordClientApproval={handleRecordClientApproval}
               onDeleteRequest={handleDeleteRequest}
               onDeleteProject={handleDeleteProject}

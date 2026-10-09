@@ -1,5 +1,6 @@
 import { transaction } from '@/database/transaction';
 import { AnalysisSchema, RequestSchema, stored, storedJson } from '@/safety/persistedSchemas';
+import { ServiceError } from '@/services/errors';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { ClientRequest, ScopeGuardAnalysis, Classification } from '@/types/domain';
 
@@ -81,13 +82,23 @@ export class ScopeGuardRepository {
     status: 'stored' | 'analyzed' | 'accepted',
     acceptedAt?: string,
   ): Promise<void> {
-    await this.db.runAsync(
+    const checked = RequestSchema.pick({ status: true, acceptedAt: true }).safeParse({ status, acceptedAt: acceptedAt ?? null });
+    if (!checked.success) throw new ServiceError('invalid_input');
+    const result = await this.db.runAsync(
       'UPDATE client_requests SET status = ?, accepted_at = ? WHERE id = ?;',
-      [status, acceptedAt || null, id],
+      [status, checked.data.acceptedAt ?? null, id],
     );
+    if (!result.changes) throw new ServiceError('not_found');
   }
 
   async deleteRequest(id: string): Promise<void> {
+    if (!this.inTransaction) return transaction(this.db, tx => new ScopeGuardRepository(tx, true).deleteRequest(id));
+    // Exclusive transactions use a connection whose foreign keys may be disabled.
+    // Remove every child explicitly instead of relying on ON DELETE CASCADE.
+    await this.db.runAsync(
+      'DELETE FROM change_proposals WHERE analysis_id IN (SELECT id FROM scopeguard_analyses WHERE request_id = ?);', [id],
+    );
+    await this.db.runAsync('DELETE FROM scopeguard_analyses WHERE request_id = ?;', [id]);
     await this.db.runAsync('DELETE FROM client_requests WHERE id = ?;', [id]);
   }
 

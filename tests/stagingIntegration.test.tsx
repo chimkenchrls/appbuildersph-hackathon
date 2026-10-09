@@ -4,8 +4,12 @@ import { initializeBackendAsync, type AppServices } from '@/services/bootstrapSe
 import { useMobileWorkspace } from '@/hooks/useMobileWorkspace';
 import { ScopeDraftScreen } from '@/screens/ScopeDraftScreen';
 import { ProposalEditorScreen } from '@/screens/ProposalEditorScreen';
+import { ProjectOverviewScreen } from '@/screens/ProjectOverviewScreen';
 import { LLMEngineUnavailableError } from '@/llm/contracts';
 import type { ScopeDraft } from '@/types/domain';
+import { AgreementSchema } from '@/safety/persistedSchemas';
+import { ServiceError } from '@/services/errors';
+import { hapticSuccess } from '@/utils/haptics';
 
 let mockParams: Record<string, string> = {};
 jest.mock('expo-router', () => ({
@@ -20,6 +24,7 @@ jest.mock('@/components/Icon', () => ({ AppIcon: () => null }));
 jest.mock('@/utils/haptics', () => ({ hapticSuccess: jest.fn(), hapticImpactLight: jest.fn() }));
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default);
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn() }));
+jest.mock('@/services/shareService', () => ({ ShareService: {} }));
 
 const date = '2026-10-09T00:00:00.000Z';
 const project = { id: 'p1', title: 'Actual project', clientName: null, description: null, createdAt: date, updatedAt: date };
@@ -64,6 +69,26 @@ test('manual creation persists an unspecified scope and uses Expo Router without
   expect(router.push).toHaveBeenCalledWith(expect.objectContaining({ pathname: '/', params: expect.objectContaining({ view: 'draft', projectId: input.id }) }));
 });
 
+test('an extracted draft confirms its terms while retaining provenance only in the draft', async () => {
+  mockParams = { view: 'draft', projectId: project.id };
+  const fake = backend();
+  const extracted = { ...draft, sourceConversation: 'Build a website', extractedWithAi: true };
+  fake.repositories.project.list.mockResolvedValue([Object.assign({}, project, { draftScopeJson: JSON.stringify(extracted) })]);
+  fake.repositories.agreement.createInitial.mockImplementation(async input => AgreementSchema.parse(input));
+  const hook = await renderHook(useMobileWorkspace);
+  await waitFor(() => expect(hook.result.current.loading).toBe(false));
+  expect(hook.result.current.draft).toEqual(extracted);
+  await act(async () => { await hook.result.current.confirm(hook.result.current.draft!); });
+  expect(fake.repositories.project.update).toHaveBeenCalledWith(project.id, { draftScopeJson: JSON.stringify(extracted) });
+  expect(fake.repositories.agreement.createInitial).toHaveBeenCalledWith(expect.objectContaining({
+    projectId: project.id, requirements: extracted.requirements, taxTreatment: 'none_specified', versionNumber: 1,
+  }));
+  const agreement = fake.repositories.agreement.createInitial.mock.calls[0][0];
+  expect(agreement).not.toHaveProperty('sourceConversation');
+  expect(agreement).not.toHaveProperty('extractedWithAi');
+  expect(router.push).toHaveBeenCalledWith(expect.objectContaining({ params: expect.objectContaining({ view: 'overview' }) }));
+});
+
 test('a proposal from another project cannot be loaded by changing route identifiers', async () => {
   mockParams = { view: 'proposal', projectId: 'p1', proposalId: 'foreign' };
   const fake = backend();
@@ -95,4 +120,77 @@ test('proposal save failure is never presented as saved locally', async () => {
   await waitFor(() => expect(save).toHaveBeenCalled());
   expect(screen.getByText(/Your edits are still here/)).toBeTruthy();
   expect(screen.queryByText('Draft saved locally.')).toBeNull();
+});
+
+test('failed scope acceptance keeps proposal edits and reports the save failure', async () => {
+  const accept = jest.fn(async () => { throw new ServiceError('save_failed'); });
+  await render(<ProposalEditorScreen project={project} onBack={jest.fn()} onAcceptProposal={accept}
+    proposal={{ id: 'prop1', projectId: project.id, analysisId: 'a1', selectedItems: ['Booking'],
+      freelancerFeeEstimate: 7000.5, freelancerDaysEstimate: 5, currency: 'PHP', draftMessage: 'My reviewed text',
+      status: 'draft', createdAt: date, updatedAt: date }} />);
+  await fireEvent.press(screen.getByLabelText('Accept scope change and seal new agreement'));
+  expect(accept).toHaveBeenCalledWith(['Booking'], 7000.5, 5);
+  expect(screen.getByText(/Could not save. Your changes are still here/)).toBeTruthy();
+  expect(screen.getByDisplayValue('My reviewed text')).toBeTruthy();
+  expect(hapticSuccess).not.toHaveBeenCalled();
+});
+
+test('existing exclusion conflicts require review and failed correction stays visible', async () => {
+  const repair = jest.fn(async () => { throw new ServiceError('save_failed'); });
+  const agreement = { ...draft, id: 'v3', projectId: project.id, versionNumber: 3, confirmedAt: date,
+    requirements: [...draft.requirements, { id: 'REQ-02', title: 'add online ordering', description: '', category: 'deliverable' as const }],
+    exclusions: ['online ordering', 'hosting fees'] };
+  await render(<ProjectOverviewScreen currentProject={project} allProjects={[project]} agreements={[agreement]}
+    selectedAgreement={agreement} onBack={jest.fn()} onSelectProject={jest.fn()} onSelectAgreementVersion={jest.fn()}
+    onNavigateToNewRequest={jest.fn()} onResolveExclusionConflicts={repair} />);
+  expect(screen.getByText(/same work as both included and excluded/)).toBeTruthy();
+  expect(repair).not.toHaveBeenCalled();
+  await fireEvent.press(screen.getByLabelText('Review conflicting exclusions'));
+  expect(screen.getByText('Confirm correction as Agreement v4')).toBeTruthy();
+  expect(repair).not.toHaveBeenCalled();
+  await fireEvent.press(screen.getByLabelText('Cancel exclusion correction'));
+  expect(repair).not.toHaveBeenCalled();
+  await fireEvent.press(screen.getByLabelText('Review conflicting exclusions'));
+  await fireEvent.press(screen.getByLabelText('Confirm exclusion correction'));
+  expect(repair).toHaveBeenCalledTimes(1);
+  expect(screen.getByText(/Could not save. Your changes are still here/)).toBeTruthy();
+  expect(screen.getByLabelText('Confirm exclusion correction')).toBeTruthy();
+  expect(hapticSuccess).not.toHaveBeenCalled();
+});
+
+test('v5 with no exclusions never restores the original draft exclusions in overview or contract preview', async () => {
+  const originalDraft = { ...draft, exclusions: ['online ordering', 'payments', 'hosting fees'] };
+  const savedProject = { ...project, draftScopeJson: JSON.stringify(originalDraft) };
+  const fourth = { ...draft, id: 'v4', projectId: project.id, versionNumber: 4, confirmedAt: date,
+    requirements: [...draft.requirements,
+      { id: 'REQ-03', title: 'add online ordering', description: '', category: 'deliverable' as const },
+      { id: 'REQ-04', title: 'payments', description: '', category: 'deliverable' as const }],
+    exclusions: ['hosting fees'] };
+  const fifth = { ...fourth, id: 'v5', versionNumber: 5, exclusions: [],
+    requirements: [...fourth.requirements,
+      { id: 'REQ-05', title: 'hosting fees', description: 'Added in Agreement v5', category: 'deliverable' as const }] };
+  const props = { currentProject: savedProject, allProjects: [savedProject], onBack: jest.fn(),
+    onSelectProject: jest.fn(), onSelectAgreementVersion: jest.fn(), onNavigateToNewRequest: jest.fn() };
+  const view = await render(<ProjectOverviewScreen {...props} agreements={[fourth]} selectedAgreement={fourth} />);
+  expect(screen.getAllByText(/^EXC-/)).toHaveLength(1);
+  expect(screen.getByText('hosting fees')).toBeTruthy();
+  await view.rerender(<ProjectOverviewScreen {...props} agreements={[fifth, fourth]} selectedAgreement={fifth} />);
+  expect(screen.queryAllByText(/^EXC-/)).toHaveLength(0);
+  expect(screen.queryByText('online ordering')).toBeNull();
+  expect(screen.getAllByText('payments')).toHaveLength(1);
+  expect(screen.getAllByText('hosting fees')).toHaveLength(1);
+  await fireEvent.press(screen.getByLabelText('View Legal Contract'));
+  expect(screen.queryByText('SCOPEGUARD™ EXCLUSIONS')).toBeNull();
+  // Selecting an earlier immutable version still shows its own exclusions.
+  await view.rerender(<ProjectOverviewScreen {...props} agreements={[fifth, fourth]} selectedAgreement={fourth} />);
+  expect(screen.getByText('SCOPEGUARD™ EXCLUSIONS')).toBeTruthy();
+});
+
+test('unconfirmed projects still show their draft exclusions', async () => {
+  const savedProject = { ...project, draftScopeJson: JSON.stringify({ ...draft, exclusions: ['hosting fees'] }) };
+  await render(<ProjectOverviewScreen currentProject={savedProject} allProjects={[savedProject]} agreements={[]}
+    selectedAgreement={null} onBack={jest.fn()} onSelectProject={jest.fn()} onSelectAgreementVersion={jest.fn()}
+    onNavigateToNewRequest={jest.fn()} />);
+  expect(screen.getByText('EXC-01')).toBeTruthy();
+  expect(screen.getByText('hosting fees')).toBeTruthy();
 });

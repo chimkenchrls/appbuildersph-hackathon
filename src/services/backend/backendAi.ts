@@ -60,6 +60,8 @@ export function createBackendAi(getPorts: () => Promise<BackendPorts>): SaklawAi
     let ports: BackendPorts;
     try { ports = await getPorts(); } catch (error) { throw toAiError(error); }
     checkCancelled(signal);
+    // Another caller may have acquired the engine while initialization was awaited.
+    if (running > 0) throw new ServiceError('model_unavailable');
     running += 1; emit();
     const task = work(ports);
     void task.then(() => setAvailable(true), () => {}).finally(() => { running -= 1; emit(); });
