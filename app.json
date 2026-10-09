@@ -11,6 +11,9 @@
     "ios": {
       "supportsTablet": true
     },
+    "android": {
+      "package": "com.saklaw.dds"
+    },
     "web": {
       "bundler": "metro",
       "output": "single"
@@ -18,7 +21,14 @@
     "plugins": [
       "expo-router",
       "expo-status-bar",
-      "expo-sqlite"
-    ]
+      "expo-sqlite",
+      "llama.rn"
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "e9284596-ad69-4623-812b-67cf09bf51f7"
+      }
+    }
   }
 }

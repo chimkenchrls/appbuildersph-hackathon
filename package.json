@@ -13,7 +13,8 @@
     "typecheck": "tsc --noEmit",
     "build:web": "expo export --platform web",
     "check:dependencies": "expo install --check",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "test": "node --experimental-strip-types --test \"tests/unit/**/*.test.ts\""
   },
   "engines": {
     "node": ">=22.13.0"
@@ -21,12 +22,14 @@
   "dependencies": {
     "@expo/metro-runtime": "~57.0.16",
     "expo": "~57.0.27",
+    "expo-build-properties": "~57.0.22",
     "expo-constants": "~57.0.21",
     "expo-dev-client": "~57.0.19",
     "expo-linking": "~57.0.12",
     "expo-router": "~57.0.25",
     "expo-sqlite": "~57.0.4",
     "expo-status-bar": "~57.0.1",
+    "llama.rn": "0.12.9",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
