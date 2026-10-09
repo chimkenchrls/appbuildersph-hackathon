@@ -5,6 +5,7 @@
     "scheme": "owlset",
     "version": "1.0.0",
     "userInterfaceStyle": "light",
+    "icon": "./assets/logo.png",
     "experiments": {
       "typedRoutes": true
     },
@@ -13,11 +14,16 @@
       "bundleIdentifier": "com.owlset.app"
     },
     "android": {
-      "package": "com.owlset.app"
+      "package": "com.owlset.app",
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/logo.png",
+        "backgroundColor": "#FFFFFF"
+      }
     },
     "web": {
       "bundler": "metro",
-      "output": "single"
+      "output": "single",
+      "favicon": "./assets/logo.png"
     },
     "plugins": [
       "expo-router",

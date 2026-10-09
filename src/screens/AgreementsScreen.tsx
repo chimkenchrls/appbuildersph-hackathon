@@ -25,22 +25,22 @@ export function AgreementsScreen({
   onSelectProjectAgreement,
   onNewProject,
 }: AgreementsScreenProps) {
-  // Aggregate all agreements across all projects
-  const allAgreementsWithProject: { project: Project; agreement: Agreement }[] = [];
-
-  for (const project of projects) {
-    const agmts = projectAgreements[project.id] || [];
-    for (const agmt of agmts) {
-      allAgreementsWithProject.push({ project, agreement: agmt });
+  // Aggregate and sort all agreements across all projects (memoized)
+  const allAgreementsWithProject = React.useMemo(() => {
+    const list: { project: Project; agreement: Agreement }[] = [];
+    for (const project of projects) {
+      const agmts = projectAgreements[project.id] || [];
+      for (const agmt of agmts) {
+        list.push({ project, agreement: agmt });
+      }
     }
-  }
-
-  // Sort by confirmed date descending
-  allAgreementsWithProject.sort(
-    (a, b) =>
-      new Date(b.agreement.confirmedAt).getTime() -
-      new Date(a.agreement.confirmedAt).getTime(),
-  );
+    list.sort(
+      (a, b) =>
+        new Date(b.agreement.confirmedAt).getTime() -
+        new Date(a.agreement.confirmedAt).getTime(),
+    );
+    return list;
+  }, [projects, projectAgreements]);
 
   return (
     <View style={styles.container}>

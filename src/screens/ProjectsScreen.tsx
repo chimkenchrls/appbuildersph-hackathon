@@ -68,20 +68,27 @@ export function ProjectsScreen({
     }
   };
 
-  const draftingCount = uniqueProjects.filter(
-    (p) => !(projectAgreements[p.id] && projectAgreements[p.id].length > 0),
-  ).length;
+  const { draftingCount, acceptedCount } = React.useMemo(() => {
+    let drafting = 0;
+    let accepted = 0;
+    for (const p of uniqueProjects) {
+      if (projectAgreements[p.id] && projectAgreements[p.id].length > 0) {
+        accepted++;
+      } else {
+        drafting++;
+      }
+    }
+    return { draftingCount: drafting, acceptedCount: accepted };
+  }, [uniqueProjects, projectAgreements]);
 
-  const acceptedCount = uniqueProjects.filter(
-    (p) => projectAgreements[p.id] && projectAgreements[p.id].length > 0,
-  ).length;
-
-  const filteredProjects = uniqueProjects.filter((p) => {
-    const isAccepted = projectAgreements[p.id] && projectAgreements[p.id].length > 0;
-    if (filter === 'drafting') return !isAccepted;
-    if (filter === 'accepted') return isAccepted;
-    return true;
-  });
+  const filteredProjects = React.useMemo(() => {
+    return uniqueProjects.filter((p) => {
+      const isAccepted = projectAgreements[p.id] && projectAgreements[p.id].length > 0;
+      if (filter === 'drafting') return !isAccepted;
+      if (filter === 'accepted') return isAccepted;
+      return true;
+    });
+  }, [uniqueProjects, projectAgreements, filter]);
 
   return (
     <View style={styles.container}>

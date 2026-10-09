@@ -111,12 +111,7 @@ export class AgreementRepository {
       [projectId],
     );
 
-    const agreements: Agreement[] = [];
-    for (const row of rows) {
-      const agmt = await this.mapAgreement(row);
-      agreements.push(agmt);
-    }
-    return agreements;
+    return Promise.all(rows.map((row) => this.mapAgreement(row)));
   }
 
   private async mapAgreement(row: AgreementRow): Promise<Agreement> {

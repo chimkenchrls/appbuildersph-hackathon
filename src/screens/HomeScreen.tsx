@@ -88,23 +88,25 @@ export function HomeScreen() {
         const analysesDict: Record<string, ScopeGuardAnalysis> = {};
         const proposalsDict: Record<string, ChangeProposal> = {};
 
-        for (const proj of loadedProjects) {
-          const agmts = await backend.repositories.agreement.listByProjectId(proj.id);
-          agreementsMap[proj.id] = agmts;
+        await Promise.all(
+          loadedProjects.map(async (proj) => {
+            const [agmts, reqs, proAnalyses, proProposals] = await Promise.all([
+              backend.repositories.agreement.listByProjectId(proj.id),
+              backend.repositories.scopeGuard.listRequestsByProjectId(proj.id),
+              backend.repositories.scopeGuard.listAnalysesByProjectId(proj.id),
+              backend.repositories.proposal.listByProjectId(proj.id),
+            ]);
 
-          const reqs = await backend.repositories.scopeGuard.listRequestsByProjectId(proj.id);
-          requestsMap[proj.id] = reqs;
-
-          const proAnalyses = await backend.repositories.scopeGuard.listAnalysesByProjectId(proj.id);
-          for (const a of proAnalyses) {
-            analysesDict[a.requestId] = a;
-          }
-
-          const proProposals = await backend.repositories.proposal.listByProjectId(proj.id);
-          for (const p of proProposals) {
-            proposalsDict[p.analysisId] = p;
-          }
-        }
+            agreementsMap[proj.id] = agmts;
+            requestsMap[proj.id] = reqs;
+            for (const a of proAnalyses) {
+              analysesDict[a.requestId] = a;
+            }
+            for (const p of proProposals) {
+              proposalsDict[p.analysisId] = p;
+            }
+          }),
+        );
 
         let latestAnalysis: ScopeGuardAnalysis | null = null;
         let latestProposal: ChangeProposal | null = null;
@@ -173,23 +175,25 @@ export function HomeScreen() {
       const analysesDict: Record<string, ScopeGuardAnalysis> = {};
       const proposalsDict: Record<string, ChangeProposal> = {};
 
-      for (const proj of loadedProjects) {
-        const agmts = await services.repositories.agreement.listByProjectId(proj.id);
-        agreementsMap[proj.id] = agmts;
+      await Promise.all(
+        loadedProjects.map(async (proj) => {
+          const [agmts, reqs, proAnalyses, proProposals] = await Promise.all([
+            services.repositories.agreement.listByProjectId(proj.id),
+            services.repositories.scopeGuard.listRequestsByProjectId(proj.id),
+            services.repositories.scopeGuard.listAnalysesByProjectId(proj.id),
+            services.repositories.proposal.listByProjectId(proj.id),
+          ]);
 
-        const reqs = await services.repositories.scopeGuard.listRequestsByProjectId(proj.id);
-        requestsMap[proj.id] = reqs;
-
-        const proAnalyses = await services.repositories.scopeGuard.listAnalysesByProjectId(proj.id);
-        for (const a of proAnalyses) {
-          analysesDict[a.requestId] = a;
-        }
-
-        const proProposals = await services.repositories.proposal.listByProjectId(proj.id);
-        for (const p of proProposals) {
-          proposalsDict[p.analysisId] = p;
-        }
-      }
+          agreementsMap[proj.id] = agmts;
+          requestsMap[proj.id] = reqs;
+          for (const a of proAnalyses) {
+            analysesDict[a.requestId] = a;
+          }
+          for (const p of proProposals) {
+            proposalsDict[p.analysisId] = p;
+          }
+        }),
+      );
 
       setProjects(loadedProjects);
       setProjectAgreements(agreementsMap);
