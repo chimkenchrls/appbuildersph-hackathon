@@ -39,8 +39,8 @@ export interface ExtractedScope {                          // what the AI return
 }
 
 export interface Requirement {
-  id: string;                  // stable within an agreement: 'R1', 'R2', ...
-  kind: 'deliverable' | 'exclusion';
+  id: string;                  // stable within an agreement, e.g. 'REQ-01'
+  kind: 'deliverable' | 'exclusion' | 'term';
   text: string;
 }
 

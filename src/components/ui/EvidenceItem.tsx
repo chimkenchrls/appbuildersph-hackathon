@@ -3,7 +3,9 @@ import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { colors, layout, spacing, type } from '@/constants/theme';
 import { Icon } from './Icon';
 
-type Props = { requirementId: string; version: number; kind: 'deliverable' | 'exclusion'; text: string };
+type Props = { requirementId: string; version: number; kind: 'deliverable' | 'exclusion' | 'term'; text: string };
+
+const kindLabels = { deliverable: 'Recorded deliverable', exclusion: 'Recorded exclusion', term: 'Recorded term' } as const;
 
 /** A reference to a stored requirement. Expanding shows the clause in full. */
 export function EvidenceItem({ requirementId, version, kind, text }: Props) {
@@ -26,7 +28,7 @@ export function EvidenceItem({ requirementId, version, kind, text }: Props) {
       </Pressable>
       {expanded ? (
         <View style={styles.clause}>
-          <Text style={type.support}>{kind === 'exclusion' ? 'Recorded exclusion' : 'Recorded deliverable'}</Text>
+          <Text style={type.support}>{kindLabels[kind]}</Text>
           <Text style={type.body}>{text}</Text>
         </View>
       ) : null}

@@ -94,9 +94,10 @@ src/
     exportService.ts      # Offline JSON import and export
     bootstrapService.ts   # Database migration, seeding, and engine initialization
     contracts.ts          # SaklawData and SaklawAi: the two interfaces the mobile screens call
-    active.ts             # The implementations the screens use (labeled fixtures for now)
+    active.ts             # The implementations the screens use: the backend, or fixtures in tests
+    backend/              # Adapters from the backend repositories, services, and AI engine to the contracts
     workflows.ts          # Extraction, confirmation, analysis, and proposal glue for the screens
-    fixtures/             # In-memory data and prepared AI output; resets when the app restarts
+    fixtures/             # In-memory data and prepared AI output for tests and EXPO_PUBLIC_SAKLAW_FIXTURES=1
   features/               # Feature hooks and components (projects, scope, request, proposal, ai)
   hooks/                  # useOperation, useExitGuard
   safety/                 # Evidence, estimate, and draft validation used by the screens

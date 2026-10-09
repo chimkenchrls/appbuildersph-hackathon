@@ -39,6 +39,7 @@ export function AgreementView({ agreement }: { agreement: Agreement }) {
         {`Fixed snapshot you reviewed at ${timeLabel(agreement.confirmedAt)}. Client approval is not recorded here.`}
       </Text>
       <Requirements title="Deliverables" items={agreement.requirements.filter(item => item.kind === 'deliverable')} />
+      <Requirements title="Recorded terms" items={agreement.requirements.filter(item => item.kind === 'term')} />
       <Requirements title="Exclusions" items={agreement.requirements.filter(item => item.kind === 'exclusion')} />
       <View style={styles.group}>
         <Text accessibilityRole="header" style={type.label}>Terms</Text>

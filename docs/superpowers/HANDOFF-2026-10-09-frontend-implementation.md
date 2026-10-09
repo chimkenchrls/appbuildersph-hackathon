@@ -1,14 +1,15 @@
 # Saklaw Frontend Implementation Handoff
 
 **Date:** 2026-10-09
-**Status:** The four screens run on labeled fixtures. Not committed, not merged, not verified on a device.
+**Status:** The four screens run on the backend (SQLite and the AI engine). `origin/main` is merged in locally. Not pushed, not verified on a device.
 **Working branch:** `pandesal-branch`
 **Plan:** [2026-10-09 mobile frontend implementation plan](./plans/2026-10-09-saklaw-mobile-frontend.md)
 **Design specification:** [Saklaw mobile frontend design](./specs/2026-10-09-saklaw-mobile-frontend-design.md)
 
 ## Instructions for the next agent
 
-Everything is uncommitted on `pandesal-branch`. Do not push, merge to `main`, deploy, or
+The front-end work and the merge of `origin/main` are committed locally on
+`pandesal-branch`; the backend routing is uncommitted. Do not push, merge to `main`, deploy, or
 reset the checkout; the front-end owner reviews and tests first. Use the design
 specification as the product authority. Fixtures stay labeled, and the app must not be
 connected to the development FastAPI/LM Studio server.
@@ -51,20 +52,52 @@ avoidance, safe areas, hardware Back and the exit guard with a real navigator, T
 VoiceOver, large system text, clipboard, and icon rendering in a native build. No
 independent code review has been run.
 
+## Backend routing (third session)
+
+`origin/main` is merged into `pandesal-branch`, and the screens now run on the backend.
+
+- `src/services/active.ts` selects the implementations: the backend by default, the
+  labeled fixtures under Jest or with `EXPO_PUBLIC_SAKLAW_FIXTURES=1`.
+- `src/services/backend/` holds the adapters: `backendData.ts` (repositories and
+  `KasunduanVaultService` behind `SaklawData`), `backendAi.ts` (the `LLMEngine`, prompts,
+  and parser behind `SaklawAi`), `mappers.ts`, and `ports.ts`.
+- The front-end contract types moved to `src/types/workspace.ts`, beside the backend's
+  `src/types/domain.ts`.
+- Unconfirmed scope drafts are stored as JSON in the backend's `app_settings` table under
+  `saklaw_scope_draft:<projectId>`, because the schema has no drafts table.
+- `ProposalRepository.update` gained an optional `selectedItems` so edited deliverables
+  persist. This is the only change to a backend file.
+- `tests/backendSqlite.test.ts` runs the real migrations, seed, repositories, and services
+  on Node's built-in SQLite through a stand-in for the `expo-sqlite` calls. It is skipped
+  where Node has no `node:sqlite`.
+
+**Not verified:** `expo-sqlite` itself on a device, and inference against a running LM
+Studio server. No device or emulator was available.
+
+**Behavior that differs from the backend services**
+
+- Evidence ids that do not resolve make the analysis fail (`invalid_output`).
+  `ScopeGuardService` filters them out silently; the adapter does not use that method.
+- Confirming a scope for a project that already has an agreement is refused.
+  `KasunduanVaultService` on its own would create version 2.
+- Agreements confirmed from the screens record `taxTreatment: 'none_specified'`, since
+  the screens do not ask for one.
+- The AI's overall classification and summary are not shown; the adapter stores values
+  derived from the findings.
+
 ## Next steps
 
-1. **Reconcile with `origin/main` before merging.** It now contains the backend workflow's
-   SQLite repositories, services, and types. Its files collide with `src/types/domain.ts`,
-   `src/services/index.ts`, `package.json`, and the lockfile, and its shapes differ
-   (requirement IDs `REQ-01` here `R1`; proposal status `draft | copied | sent` here
-   `draft`; separate `ClientRequest` and `ScopeGuardAnalysis` here one `Analysis`). The
-   screens depend only on `SaklawData` and `SaklawAi` in `src/services/contracts.ts`, so
-   the expected route is an adapter over the backend services behind those two interfaces.
-2. **Device pass** on a development build, using the list in `FRONTEND.md` section 11. A new
+1. **Device pass** on a development build, using the list in `FRONTEND.md` section 11. A new
    build is required: `expo-clipboard` and the Lucide icon plugin are native additions.
+2. **AI engine.** The engine is `LMStudioAdapter`, which needs a reachable LM Studio
+   server. The seed stores `lm_studio_url` in settings on first launch, and that saved
+   value then wins over the environment variable; there is no settings screen to change it.
+   The project's offline requirement still needs an on-device engine behind `LLMEngine`.
 3. **Independent review** of the full diff.
 4. Check the blur-save window on real SQLite: `useWorkspace` ignores edits while a save is
    in flight (see the plan's execution notes).
+5. The backend seeds a demo project into SQLite. It appears in the project list without a
+   demo label.
 
 ## Decisions made during implementation
 

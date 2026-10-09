@@ -1,7 +1,7 @@
 import { ServiceError } from '@/services/errors';
 import type { ScopeDraft, ScopeTerms } from '@/types/workspace';
 
-export const limits = { name: 120, source: 30000, request: 8000, item: 2000, message: 12000, items: 80 } as const;
+export const limits = { name: 120, source: 15000, request: 8000, item: 2000, message: 12000, items: 80 } as const;
 
 export function textValue(value: unknown, maximum: number, allowBlank = false): string {
   if (typeof value !== 'string' || value.length > maximum || (!allowBlank && !value.trim())) throw new ServiceError('invalid_input');

@@ -33,8 +33,10 @@ The checked-in starter currently has:
 - No `ios/` or `android/` directories; they are ignored in Git.
 
 Expo Router, ESLint, Jest, and the development-client dependency are installed.
-The mobile screens currently run on labeled in-memory fixtures in
-`src/services/fixtures/`; they are not evidence of persistence or local inference.
+The mobile screens call the SQLite repositories and the AI engine through the adapters in
+`src/services/backend/`. Tests, and runs with `EXPO_PUBLIC_SAKLAW_FIXTURES=1`, use the
+labeled in-memory fixtures in `src/services/fixtures/`. The current AI engine is the
+LM Studio HTTP adapter, a development stand-in for on-device inference.
 The setup steps below record how the starter was evolved. Do not claim that
 development builds or offline inference work before configuring and verifying
 them. Recheck the baseline whenever these files change.

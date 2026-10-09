@@ -66,6 +66,7 @@ export class ProposalRepository {
       status?: ProposalStatus;
       freelancerFeeEstimate?: number | null;
       freelancerDaysEstimate?: number | null;
+      selectedItems?: string[];
     },
   ): Promise<ChangeProposal | null> {
     const existing = await this.getById(id);
@@ -76,12 +77,14 @@ export class ProposalRepository {
     const status = updates.status !== undefined ? updates.status : existing.status;
     const fee = updates.freelancerFeeEstimate !== undefined ? updates.freelancerFeeEstimate : existing.freelancerFeeEstimate;
     const days = updates.freelancerDaysEstimate !== undefined ? updates.freelancerDaysEstimate : existing.freelancerDaysEstimate;
+    const selectedItems = updates.selectedItems !== undefined ? updates.selectedItems : existing.selectedItems;
 
     await this.db.runAsync(
       `UPDATE change_proposals
-       SET draft_message = ?, status = ?, freelancer_fee_estimate = ?, freelancer_days_estimate = ?, updated_at = ?
+       SET draft_message = ?, status = ?, freelancer_fee_estimate = ?, freelancer_days_estimate = ?,
+           selected_items_json = ?, updated_at = ?
        WHERE id = ?;`,
-      [draftMessage, status, fee, days, now, id],
+      [draftMessage, status, fee, days, JSON.stringify(selectedItems), now, id],
     );
 
     return {
@@ -90,6 +93,7 @@ export class ProposalRepository {
       status,
       freelancerFeeEstimate: fee,
       freelancerDaysEstimate: days,
+      selectedItems,
       updatedAt: now,
     };
   }
