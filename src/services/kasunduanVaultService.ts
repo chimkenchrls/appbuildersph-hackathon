@@ -93,22 +93,34 @@ export class KasunduanVaultService {
 
     const updatedRequirements = [...currentRequirements, ...newRequirements];
     const conflicts = conflictingExclusions({ requirements: updatedRequirements, exclusions: currentAgreement.exclusions });
-    const updatedBudget = (currentAgreement.budgetAmount || 0) + (additionalFee || 0);
-    const updatedDays = (currentAgreement.durationDays || 0) + (additionalDays || 0);
+    // An agreed addition does not establish an unspecified base total.
+    const updatedBudget = currentAgreement.budgetAmount === null
+      ? null : currentAgreement.budgetAmount + (additionalFee ?? 0);
+    const updatedDays = currentAgreement.durationDays === null
+      ? null : currentAgreement.durationDays + (additionalDays ?? 0);
+    const budgetNotes = updatedBudget === null && additionalFee != null
+      ? [currentAgreement.budgetNotes,
+        `Additional ${currentAgreement.budgetCurrency} ${additionalFee.toLocaleString('en-US', { maximumSignificantDigits: 21 })} agreed in v${nextVersion}`]
+        .filter(Boolean).join('\n')
+      : currentAgreement.budgetNotes;
+    const timelineNotes = updatedDays === null && additionalDays != null
+      ? [currentAgreement.timelineNotes, `Additional ${additionalDays} working days agreed in v${nextVersion}`]
+        .filter(Boolean).join('\n')
+      : additionalDays
+        ? `${updatedDays} days (extended by ${additionalDays} days for additions)`
+        : currentAgreement.timelineNotes;
 
     const baseTitle = currentAgreement.title.split(' · ')[0] || 'Project Scope';
 
     const draftToConfirm: ScopeDraft = {
       title: baseTitle,
       requirements: updatedRequirements,
-      budgetAmount: updatedBudget > 0 ? updatedBudget : currentAgreement.budgetAmount,
+      budgetAmount: updatedBudget,
       budgetCurrency: currentAgreement.budgetCurrency,
-      budgetNotes: currentAgreement.budgetNotes,
-      durationDays: updatedDays > 0 ? updatedDays : currentAgreement.durationDays,
+      budgetNotes,
+      durationDays: updatedDays,
       deadline: currentAgreement.deadline,
-      timelineNotes: additionalDays
-        ? `${updatedDays} days (extended by ${additionalDays} days for additions)`
-        : currentAgreement.timelineNotes,
+      timelineNotes,
       revisionTerms: currentAgreement.revisionTerms,
       exclusions: currentAgreement.exclusions.filter(item => !conflicts.includes(item)),
       missingInformation: currentAgreement.missingInformation,
