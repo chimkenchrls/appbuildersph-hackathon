@@ -1,3 +1,6 @@
+import { wholeWorkingDays } from '@/safety/validation';
+import { ServiceError } from '@/services/errors';
+import { ProposalSchema, stored, storedJson } from '@/safety/persistedSchemas';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { ChangeProposal, ProposalStatus } from '@/types/domain';
 
@@ -19,6 +22,8 @@ export class ProposalRepository {
   constructor(private readonly db: SQLiteDatabase) {}
 
   async create(p: ChangeProposal): Promise<ChangeProposal> {
+    p = ProposalSchema.parse(p);
+    if (!wholeWorkingDays(p.freelancerDaysEstimate)) throw new ServiceError('invalid_input');
     await this.db.runAsync(
       `INSERT INTO change_proposals (
         id, project_id, analysis_id, selected_items_json,
@@ -77,8 +82,11 @@ export class ProposalRepository {
     const status = updates.status !== undefined ? updates.status : existing.status;
     const fee = updates.freelancerFeeEstimate !== undefined ? updates.freelancerFeeEstimate : existing.freelancerFeeEstimate;
     const days = updates.freelancerDaysEstimate !== undefined ? updates.freelancerDaysEstimate : existing.freelancerDaysEstimate;
+    if (!wholeWorkingDays(days)) throw new ServiceError('invalid_input');
     const selectedItems = updates.selectedItems !== undefined ? updates.selectedItems : existing.selectedItems;
 
+    const next = ProposalSchema.parse({ ...existing, draftMessage, status, freelancerFeeEstimate: fee,
+      freelancerDaysEstimate: days, selectedItems, updatedAt: now });
     await this.db.runAsync(
       `UPDATE change_proposals
        SET draft_message = ?, status = ?, freelancer_fee_estimate = ?, freelancer_days_estimate = ?,
@@ -87,23 +95,15 @@ export class ProposalRepository {
       [draftMessage, status, fee, days, JSON.stringify(selectedItems), now, id],
     );
 
-    return {
-      ...existing,
-      draftMessage,
-      status,
-      freelancerFeeEstimate: fee,
-      freelancerDaysEstimate: days,
-      selectedItems,
-      updatedAt: now,
-    };
+    return next;
   }
 
   private mapProposal(row: ProposalRow): ChangeProposal {
-    return {
+    return stored(ProposalSchema, {
       id: row.id,
       projectId: row.project_id,
       analysisId: row.analysis_id,
-      selectedItems: JSON.parse(row.selected_items_json || '[]'),
+      selectedItems: storedJson(row.selected_items_json),
       freelancerFeeEstimate: row.freelancer_fee_estimate,
       freelancerDaysEstimate: row.freelancer_days_estimate,
       currency: row.currency,
@@ -111,6 +111,6 @@ export class ProposalRepository {
       status: row.status,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-    };
+    });
   }
 }

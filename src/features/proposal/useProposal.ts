@@ -3,7 +3,7 @@ import * as Clipboard from 'expo-clipboard';
 import { data, workflows } from '@/services/active';
 import { useOperation } from '@/hooks/useOperation';
 import { checkCancelled, ServiceError } from '@/services/errors';
-import { parseEstimate } from '@/safety/parseEstimate';
+import { parseEstimate, parseWorkingDays } from '@/safety/parseEstimate';
 import type { DraftItem, Proposal } from '@/types/workspace';
 import { newId } from '@/utils/ids';
 
@@ -51,14 +51,14 @@ export function useProposal(projectId: string, proposalId: string) {
   };
   const errors: { fee?: string; days?: string; deliverables?: string } = {};
   try { parseEstimate(form?.fee ?? ''); } catch { errors.fee = 'Enter a non-negative amount, up to two decimal places.'; }
-  try { parseEstimate(form?.days ?? ''); } catch { errors.days = 'Enter non-negative working days, up to two decimal places.'; }
+  try { parseWorkingDays(form?.days ?? ''); } catch { errors.days = 'Enter a whole number of non-negative working days.'; }
   if (form && !form.deliverables.some(item => item.text.trim())) errors.deliverables = 'Add at least one additional deliverable.';
   const snapshot = (): Proposal => {
     if (!proposal || !current.current) throw new ServiceError('not_found');
     const f = current.current;
     const deliverables = f.deliverables.map(item => item.text.trim()).filter(Boolean);
     if (!deliverables.length) throw new ServiceError('invalid_input');
-    return { ...proposal, deliverables, feeAmount: parseEstimate(f.fee), extraWorkingDays: parseEstimate(f.days), message: f.message };
+    return { ...proposal, deliverables, feeAmount: parseEstimate(f.fee), extraWorkingDays: parseWorkingDays(f.days), message: f.message };
   };
   const save = async () => {
     const formSnapshot = current.current;

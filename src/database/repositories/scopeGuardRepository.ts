@@ -1,5 +1,7 @@
+import { transaction } from '@/database/transaction';
+import { AnalysisSchema, RequestSchema, stored, storedJson } from '@/safety/persistedSchemas';
 import type { SQLiteDatabase } from 'expo-sqlite';
-import type { ClientRequest, ScopeGuardAnalysis, Finding, Classification } from '@/types/domain';
+import type { ClientRequest, ScopeGuardAnalysis, Classification } from '@/types/domain';
 
 interface AnalysisRow {
   id: string;
@@ -21,13 +23,20 @@ interface RequestRow {
 }
 
 export class ScopeGuardRepository {
-  constructor(private readonly db: SQLiteDatabase) {}
+  constructor(private readonly db: SQLiteDatabase, private readonly inTransaction = false) {}
+
+  async createRequestWithAnalysis(request: ClientRequest, analysis: ScopeGuardAnalysis): Promise<ScopeGuardAnalysis> {
+    if (!this.inTransaction) return transaction(this.db, tx => new ScopeGuardRepository(tx, true).createRequestWithAnalysis(request, analysis));
+    await this.createRequest(request);
+    return this.createAnalysis(analysis);
+  }
 
   async createRequest(req: ClientRequest): Promise<ClientRequest> {
+    req = RequestSchema.parse(req);
     await this.db.runAsync(
       `INSERT INTO client_requests (id, project_id, agreement_id, raw_text, created_at)
        VALUES (?, ?, ?, ?, ?);`,
-      [req.id, req.projectId, req.agreementId, req.rawText.trim(), req.createdAt],
+      [req.id, req.projectId, req.agreementId, req.rawText, req.createdAt],
     );
     return req;
   }
@@ -38,13 +47,13 @@ export class ScopeGuardRepository {
       [id],
     );
     if (!row) return null;
-    return {
+    return stored(RequestSchema, {
       id: row.id,
       projectId: row.project_id,
       agreementId: row.agreement_id,
       rawText: row.raw_text,
       createdAt: row.created_at,
-    };
+    });
   }
 
   async listRequestsByProjectId(projectId: string): Promise<ClientRequest[]> {
@@ -52,7 +61,7 @@ export class ScopeGuardRepository {
       'SELECT id, project_id, agreement_id, raw_text, created_at FROM client_requests WHERE project_id = ? ORDER BY created_at DESC;',
       [projectId],
     );
-    return rows.map((r) => ({
+    return rows.map((r) => stored(RequestSchema, {
       id: r.id,
       projectId: r.project_id,
       agreementId: r.agreement_id,
@@ -62,6 +71,7 @@ export class ScopeGuardRepository {
   }
 
   async createAnalysis(analysis: ScopeGuardAnalysis): Promise<ScopeGuardAnalysis> {
+    analysis = AnalysisSchema.parse(analysis);
     await this.db.runAsync(
       `INSERT INTO scopeguard_analyses (
         id, request_id, agreement_id, classification,
@@ -111,10 +121,10 @@ export class ScopeGuardRepository {
   }
 
   private mapAnalysis(row: AnalysisRow): ScopeGuardAnalysis {
-    const findings: Finding[] = JSON.parse(row.findings_json || '[]');
-    const clarificationQuestions: string[] = JSON.parse(row.clarification_questions_json || '[]');
+    const findings = storedJson(row.findings_json);
+    const clarificationQuestions = storedJson(row.clarification_questions_json);
 
-    return {
+    return stored(AnalysisSchema, {
       id: row.id,
       requestId: row.request_id,
       agreementId: row.agreement_id,
@@ -123,6 +133,6 @@ export class ScopeGuardRepository {
       findings,
       clarificationQuestions,
       createdAt: row.created_at,
-    };
+    });
   }
 }

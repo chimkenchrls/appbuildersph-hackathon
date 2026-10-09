@@ -1,3 +1,5 @@
+import { overallClassification } from '@/safety/persistedSchemas';
+import { ServiceError } from './errors';
 import type { LLMEngine } from '@/llm/contracts';
 import { parseAndValidateJson } from '@/llm/jsonParser';
 import { buildScopeGuardPrompt } from '@/llm/prompts/scopeGuardPrompt';
@@ -25,7 +27,7 @@ export class ScopeGuardService {
     }
 
     const agreement = await this.agreementRepo.getById(agreementId);
-    if (!agreement) {
+    if (!agreement || agreement.projectId !== projectId) {
       throw new Error(`Referenced agreement ${agreementId} was not found`);
     }
 
@@ -41,12 +43,14 @@ export class ScopeGuardService {
 
     // Sanitize and verify evidence requirement IDs against stored agreement clauses
     const findings: Finding[] = parsed.findings.map((f) => {
-      const verifiedIds = f.evidence_requirement_ids.filter((id) => validRequirementIds.has(id));
+      const ids = f.evidence_requirement_ids;
+      if (ids.some(id => !validRequirementIds.has(id)) || new Set(ids).size !== ids.length ||
+        (f.classification === 'included' && !ids.length)) throw new ServiceError('invalid_output');
       return {
         item: f.item,
         classification: f.classification,
         explanation: f.explanation,
-        evidenceRequirementIds: verifiedIds,
+        evidenceRequirementIds: ids,
       };
     });
 
@@ -54,28 +58,19 @@ export class ScopeGuardService {
     const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     const analysisId = `ana_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
-    // Persist request record
-    await this.scopeGuardRepo.createRequest({
-      id: requestId,
-      projectId,
-      agreementId,
-      rawText: trimmed,
-      createdAt: now,
-    });
-
     // Persist analysis record
     const analysis: ScopeGuardAnalysis = {
       id: analysisId,
       requestId,
       agreementId,
-      classification: parsed.overall_classification,
+      classification: overallClassification(findings),
       summary: parsed.summary,
       findings,
       clarificationQuestions: parsed.clarification_questions,
       createdAt: now,
     };
 
-    return this.scopeGuardRepo.createAnalysis(analysis);
+    return this.scopeGuardRepo.createRequestWithAnalysis({ id: requestId, projectId, agreementId, rawText: trimmed, createdAt: now }, analysis);
   }
 
   async getAnalysisByRequestId(requestId: string): Promise<ScopeGuardAnalysis | null> {

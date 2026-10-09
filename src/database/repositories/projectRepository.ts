@@ -1,3 +1,4 @@
+import { ProjectSchema, stored } from '@/safety/persistedSchemas';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { Project } from '@/types/domain';
 
@@ -6,20 +7,20 @@ export class ProjectRepository {
 
   async create(data: { id: string; title: string; clientName?: string | null; description?: string | null }): Promise<Project> {
     const now = new Date().toISOString();
-    await this.db.runAsync(
-      `INSERT INTO projects (id, title, client_name, description, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?);`,
-      [data.id, data.title.trim(), data.clientName?.trim() ?? null, data.description?.trim() ?? null, now, now],
-    );
+    return this.restore({
+      id: data.id, title: data.title.trim(), clientName: data.clientName?.trim() ?? null,
+      description: data.description?.trim() ?? null, createdAt: now, updatedAt: now,
+    });
+  }
 
-    return {
-      id: data.id,
-      title: data.title.trim(),
-      clientName: data.clientName?.trim() ?? null,
-      description: data.description?.trim() ?? null,
-      createdAt: now,
-      updatedAt: now,
-    };
+  /** Restore a validated backup exactly; ordinary creation owns new timestamps. */
+  async restore(project: Project): Promise<Project> {
+    project = ProjectSchema.parse(project);
+    await this.db.runAsync(
+      'INSERT INTO projects (id, title, client_name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?);',
+      [project.id, project.title, project.clientName, project.description, project.createdAt, project.updatedAt],
+    );
+    return project;
   }
 
   async list(): Promise<Project[]> {
@@ -32,7 +33,7 @@ export class ProjectRepository {
       updated_at: string;
     }>('SELECT id, title, client_name, description, created_at, updated_at FROM projects ORDER BY updated_at DESC;');
 
-    return rows.map((r) => ({
+    return rows.map((r) => stored(ProjectSchema, {
       id: r.id,
       title: r.title,
       clientName: r.client_name,
@@ -54,14 +55,14 @@ export class ProjectRepository {
 
     if (!row) return null;
 
-    return {
+    return stored(ProjectSchema, {
       id: row.id,
       title: row.title,
       clientName: row.client_name,
       description: row.description,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
-    };
+    });
   }
 
   async update(id: string, updates: { title?: string; clientName?: string | null; description?: string | null }): Promise<Project | null> {
@@ -73,19 +74,13 @@ export class ProjectRepository {
     const clientName = updates.clientName !== undefined ? (updates.clientName?.trim() ?? null) : existing.clientName;
     const description = updates.description !== undefined ? (updates.description?.trim() ?? null) : existing.description;
 
+    const next = ProjectSchema.parse({ id, title, clientName, description, createdAt: existing.createdAt, updatedAt: now });
     await this.db.runAsync(
       `UPDATE projects SET title = ?, client_name = ?, description = ?, updated_at = ? WHERE id = ?;`,
       [title, clientName, description, now, id],
     );
 
-    return {
-      id,
-      title,
-      clientName,
-      description,
-      createdAt: existing.createdAt,
-      updatedAt: now,
-    };
+    return next;
   }
 
   async delete(id: string): Promise<boolean> {

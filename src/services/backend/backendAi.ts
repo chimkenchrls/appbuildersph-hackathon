@@ -1,4 +1,4 @@
-import { LLMEngineUnavailableError, LLMParseError } from '@/llm/contracts';
+import { LLMEngineUnavailableError, LLMGenerationTimeoutError, LLMParseError } from '@/llm/contracts';
 import { parseAndValidateJson } from '@/llm/jsonParser';
 import { buildChangeDeskPrompt } from '@/llm/prompts/changeDeskPrompt';
 import { buildScopeGuardPrompt } from '@/llm/prompts/scopeGuardPrompt';
@@ -37,6 +37,7 @@ export function createBackendAi(getPorts: () => Promise<BackendPorts>): SaklawAi
 
   function toAiError(error: unknown): ServiceError {
     if (error instanceof ServiceError) return error;
+    if (error instanceof LLMGenerationTimeoutError) return new ServiceError('generation_timeout', error.message);
     if (error instanceof LLMEngineUnavailableError) { setAvailable(false); return new ServiceError('model_unavailable', error.message); }
     if (error instanceof LLMParseError) return new ServiceError('invalid_output', error.message);
     return new ServiceError('invalid_output', error instanceof Error ? error.message : undefined);

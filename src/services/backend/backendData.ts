@@ -1,15 +1,12 @@
 import type { SaklawData } from '@/services/contracts';
 import { ServiceError } from '@/services/errors';
-import { cleanDraft, finiteEstimate, limits, textValue } from '@/safety/validation';
+import { cleanDraft, finiteEstimate, wholeWorkingDays, limits, textValue } from '@/safety/validation';
 import { validateFindings } from '@/safety/validateFindings';
 import type * as Backend from '@/types/domain';
 import type { ScopeDraft, ScopeStatus } from '@/types/workspace';
 import { toBackendAnalysisFields, toBackendDraft, toWorkspaceAgreement, toWorkspaceAnalysis, toWorkspaceProject, toWorkspaceProposal } from './mappers';
+import { draftKey, parseStoredDraft } from '@/safety/scopeDraft';
 import type { BackendPorts } from './ports';
-
-// The backend has no table for an unconfirmed scope draft, so the reviewed draft is kept
-// as JSON in its settings store. An empty value means there is no draft.
-const draftKey = (projectId: string) => `saklaw_scope_draft:${projectId}`;
 
 // Same shape as the ids the backend services generate.
 const newId = (prefix: string) => `${prefix}_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
@@ -40,11 +37,7 @@ export function createBackendData(getPorts: () => Promise<BackendPorts>): Saklaw
   async function readDraft(ports: BackendPorts, projectId: string): Promise<ScopeDraft | null> {
     const stored = await ports.settings.get(draftKey(projectId));
     if (!stored) return null;
-    try {
-      return cleanDraft(JSON.parse(stored) as ScopeDraft);
-    } catch {
-      return null;
-    }
+    return parseStoredDraft(stored, projectId);
   }
 
   async function scopeState(ports: BackendPorts, projectId: string): Promise<{ status: ScopeStatus; version: number | null }> {
@@ -53,14 +46,18 @@ export function createBackendData(getPorts: () => Promise<BackendPorts>): Saklaw
     return { status: (await readDraft(ports, projectId)) ? 'draft' : 'none', version: null };
   }
 
-  /** An analysis with the request and agreement it belongs to, or null if any link is missing. */
+  /** A missing/foreign analysis is unavailable; broken stored links are an integrity error. */
   async function linkedAnalysis(ports: BackendPorts, projectId: string, analysisId: string) {
     const analysis = await ports.scopeGuard.getAnalysisById(analysisId);
     if (!analysis) return null;
     const request = await ports.scopeGuard.getRequestById(analysis.requestId);
-    if (!request || request.projectId !== projectId) return null;
+    if (!request) throw new ServiceError('data_integrity');
+    if (request.projectId !== projectId) return null;
+    if (request.agreementId !== analysis.agreementId) throw new ServiceError('data_integrity');
     const agreement = await ports.agreements.getById(analysis.agreementId);
-    if (!agreement || agreement.projectId !== projectId) return null;
+    if (!agreement || agreement.projectId !== projectId) throw new ServiceError('data_integrity');
+    try { validateFindings(toWorkspaceAnalysis(analysis, request, agreement).findings, toWorkspaceAgreement(agreement)); }
+    catch { throw new ServiceError('data_integrity'); }
     return { analysis, request, agreement };
   }
 
@@ -98,29 +95,30 @@ export function createBackendData(getPorts: () => Promise<BackendPorts>): Saklaw
     },
 
     async saveDraft(input) {
-      const ports = await getPorts();
-      await requireProject(ports, input.projectId);
-      if (await ports.agreements.getLatestByProjectId(input.projectId)) throw new ServiceError('save_failed');
-      const draft = { ...cleanDraft(input), updatedAt: new Date().toISOString() };
-      await write(async () => {
+      const root = await getPorts();
+      return write(() => root.transaction(async ports => {
+        await requireProject(ports, input.projectId);
+        if (await ports.agreements.getLatestByProjectId(input.projectId)) throw new ServiceError('save_failed');
+        const draft = { ...cleanDraft(input), updatedAt: new Date().toISOString() };
+
         await ports.settings.set(draftKey(input.projectId), JSON.stringify(draft));
         await ports.projects.update(input.projectId, {});
-      });
+      }));
     },
 
     async confirmScope(projectId, input) {
-      const ports = await getPorts();
-      const project = await requireProject(ports, projectId);
-      if (input.projectId !== projectId) throw new ServiceError('not_found');
-      // Agreement v1 is fixed. The backend would otherwise create a version 2.
-      if (await ports.agreements.getLatestByProjectId(projectId)) throw new ServiceError('save_failed');
-      const draft = cleanDraft(input, true);
-      return write(async () => {
+      const root = await getPorts();
+      return write(() => root.transaction(async ports => {
+        const project = await requireProject(ports, projectId);
+        if (input.projectId !== projectId) throw new ServiceError('not_found');
+        // Keep the frontend confirmation guard within the same transaction as the save.
+        if (await ports.agreements.getLatestByProjectId(projectId)) throw new ServiceError('save_failed');
+        const draft = cleanDraft(input, true);
         const agreement = await ports.vault.confirmScope(projectId, toBackendDraft(project.title, draft));
         await ports.settings.set(draftKey(projectId), '');
         await ports.projects.update(projectId, {});
         return toWorkspaceAgreement(agreement);
-      });
+      }));
     },
 
     async getAgreement(projectId) {
@@ -131,13 +129,14 @@ export function createBackendData(getPorts: () => Promise<BackendPorts>): Saklaw
     },
 
     async saveAnalysis(input) {
-      const ports = await getPorts();
-      await requireProject(ports, input.projectId);
-      const agreement = await ports.agreements.getById(input.agreementId);
-      if (!agreement || agreement.projectId !== input.projectId || agreement.versionNumber !== input.agreementVersion) throw new ServiceError('not_found');
-      const requestText = textValue(input.requestText, limits.request);
-      validateFindings(input.findings, toWorkspaceAgreement(agreement));
-      return write(async () => {
+      const root = await getPorts();
+      return write(() => root.transaction(async ports => {
+        await requireProject(ports, input.projectId);
+        const agreement = await ports.agreements.getById(input.agreementId);
+        if (!agreement || agreement.projectId !== input.projectId || agreement.versionNumber !== input.agreementVersion) throw new ServiceError('not_found');
+        const requestText = textValue(input.requestText, limits.request);
+        validateFindings(input.findings, toWorkspaceAgreement(agreement));
+
         const createdAt = new Date().toISOString();
         const request: Backend.ClientRequest = { id: newId('req'), projectId: input.projectId, agreementId: agreement.id, rawText: requestText, createdAt };
         await ports.scopeGuard.createRequest(request);
@@ -146,7 +145,7 @@ export function createBackendData(getPorts: () => Promise<BackendPorts>): Saklaw
         });
         await ports.projects.update(input.projectId, {});
         return toWorkspaceAnalysis(analysis, request, agreement);
-      });
+      }));
     },
 
     async listAnalyses(projectId) {
@@ -164,13 +163,14 @@ export function createBackendData(getPorts: () => Promise<BackendPorts>): Saklaw
     },
 
     async createProposal(projectId, analysisId, deliverables) {
-      const ports = await getPorts();
-      const entry = await linkedAnalysis(ports, projectId, analysisId);
-      if (!entry) throw new ServiceError('not_found');
-      const selectedItems = items(deliverables);
-      const proposable = new Set(entry.analysis.findings.filter(finding => finding.classification === 'potential_additional').map(finding => finding.item));
-      if (selectedItems.some(text => !proposable.has(text))) throw new ServiceError('invalid_input');
-      return write(async () => {
+      const root = await getPorts();
+      return write(() => root.transaction(async ports => {
+        const entry = await linkedAnalysis(ports, projectId, analysisId);
+        if (!entry) throw new ServiceError('not_found');
+        const selectedItems = items(deliverables);
+        const proposable = new Set(entry.analysis.findings.filter(finding => finding.classification === 'potential_additional').map(finding => finding.item));
+        if (selectedItems.some(text => !proposable.has(text))) throw new ServiceError('invalid_input');
+
         const now = new Date().toISOString();
         const proposal = await ports.proposals.create({
           id: newId('prop'), projectId, analysisId, selectedItems,
@@ -180,39 +180,44 @@ export function createBackendData(getPorts: () => Promise<BackendPorts>): Saklaw
         });
         await ports.projects.update(projectId, {});
         return toWorkspaceProposal(proposal);
-      });
+      }));
     },
 
     async getProposal(projectId, id) {
       const ports = await getPorts();
       const proposal = await ports.proposals.getById(id);
       if (!proposal || proposal.projectId !== projectId) return null;
-      if (!(await linkedAnalysis(ports, projectId, proposal.analysisId))) return null;
+      if (!(await linkedAnalysis(ports, projectId, proposal.analysisId))) throw new ServiceError('data_integrity');
       return toWorkspaceProposal(proposal);
     },
 
     async saveProposal(input) {
-      const ports = await getPorts();
-      const stored = await ports.proposals.getById(input.id);
-      if (!stored || stored.projectId !== input.projectId || stored.analysisId !== input.analysisId) throw new ServiceError('not_found');
-      if (!(await linkedAnalysis(ports, input.projectId, input.analysisId))) throw new ServiceError('not_found');
-      const selectedItems = items(input.deliverables);
-      if (input.status !== 'draft' || !finiteEstimate(input.feeAmount) || !finiteEstimate(input.extraWorkingDays)) throw new ServiceError('invalid_input');
-      const draftMessage = textValue(input.message, limits.message, true);
-      return write(async () => {
+      const root = await getPorts();
+      return write(() => root.transaction(async ports => {
+        const stored = await ports.proposals.getById(input.id);
+        if (!stored || stored.projectId !== input.projectId || stored.analysisId !== input.analysisId) throw new ServiceError('not_found');
+        if (!(await linkedAnalysis(ports, input.projectId, input.analysisId))) throw new ServiceError('not_found');
+        const selectedItems = items(input.deliverables);
+        if (input.status !== 'draft' || !finiteEstimate(input.feeAmount) || !wholeWorkingDays(input.extraWorkingDays)) throw new ServiceError('invalid_input');
+        const draftMessage = textValue(input.message, limits.message, true);
+
         const updated = await ports.proposals.update(input.id, {
           draftMessage, selectedItems, freelancerFeeEstimate: input.feeAmount, freelancerDaysEstimate: input.extraWorkingDays,
         });
         if (!updated) throw new ServiceError('not_found');
         await ports.projects.update(input.projectId, {});
         return toWorkspaceProposal(updated);
-      });
+      }));
     },
 
     async listProposals(projectId) {
       const ports = await getPorts();
       await requireProject(ports, projectId);
-      return (await ports.proposals.listByProjectId(projectId)).map(toWorkspaceProposal);
+      const proposals = await ports.proposals.listByProjectId(projectId);
+      return Promise.all(proposals.map(async proposal => {
+        if (!(await linkedAnalysis(ports, projectId, proposal.analysisId))) throw new ServiceError('data_integrity');
+        return toWorkspaceProposal(proposal);
+      }));
     },
   };
 }

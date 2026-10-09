@@ -10,6 +10,9 @@ export function textValue(value: unknown, maximum: number, allowBlank = false): 
 export function finiteEstimate(value: unknown): value is number | null {
   return value === null || (typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 1_000_000_000_000);
 }
+export function wholeWorkingDays(value: unknown): value is number | null {
+  return finiteEstimate(value) && (value === null || Number.isSafeInteger(value));
+}
 export function validateTerms(value: ScopeTerms): ScopeTerms {
   if (!value || !finiteEstimate(value.budgetAmount) || !/^[A-Z]{3}$/.test(value.currency)) throw new ServiceError('invalid_input');
   return {

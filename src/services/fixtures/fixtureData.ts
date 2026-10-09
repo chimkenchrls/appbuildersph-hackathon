@@ -1,6 +1,6 @@
 import type { SaklawData } from '@/services/contracts';
 import { ServiceError } from '@/services/errors';
-import { cleanDraft, finiteEstimate, limits, textValue } from '@/safety/validation';
+import { cleanDraft, finiteEstimate, wholeWorkingDays, limits, textValue } from '@/safety/validation';
 import { validateFindings } from '@/safety/validateFindings';
 import type { Agreement, Analysis, Project, Proposal, ScopeDraft } from '@/types/workspace';
 import { newId } from '@/utils/ids';
@@ -107,7 +107,7 @@ export function createFixtureData(seed = true): SaklawData {
       if (!saved || saved.projectId !== input.projectId || saved.analysisId !== input.analysisId) throw new ServiceError('not_found');
       analysisFor(input.projectId, input.analysisId);
       const deliverables = strings(input.deliverables);
-      if (input.status !== 'draft' || !finiteEstimate(input.feeAmount) || !finiteEstimate(input.extraWorkingDays) || !/^[A-Z]{3}$/.test(input.currency)) throw new ServiceError('invalid_input');
+      if (input.status !== 'draft' || !finiteEstimate(input.feeAmount) || !wholeWorkingDays(input.extraWorkingDays) || !/^[A-Z]{3}$/.test(input.currency)) throw new ServiceError('invalid_input');
       textValue(input.message, limits.message, true);
       writable();
       const result = copy({ ...input, deliverables, createdAt: saved.createdAt, updatedAt: now() });

@@ -1,3 +1,6 @@
+import { AgreementSchema, stored, storedJson } from '@/safety/persistedSchemas';
+import { ServiceError } from '@/services/errors';
+import { transaction } from '@/database/transaction';
 import type { SQLiteDatabase } from 'expo-sqlite';
 import type { Agreement, Requirement, TaxTreatment } from '@/types/domain';
 
@@ -17,6 +20,7 @@ interface AgreementRow {
   missing_info_json: string;
   tax_treatment?: string | null;
   confirmed_at: string;
+  sealed: number;
 }
 
 interface RequirementRow {
@@ -28,45 +32,52 @@ interface RequirementRow {
 }
 
 export class AgreementRepository {
-  constructor(private readonly db: SQLiteDatabase) {}
+  constructor(private readonly db: SQLiteDatabase, private readonly inTransaction = false) {}
+
+  async createInitial(agreement: Agreement): Promise<Agreement> {
+    if (!this.inTransaction) return transaction(this.db, tx => new AgreementRepository(tx, true).createInitial(agreement));
+    if (agreement.versionNumber !== 1 || await this.getLatestByProjectId(agreement.projectId)) throw new ServiceError('save_failed');
+    return this.create(agreement);
+  }
 
   async create(agreement: Agreement): Promise<Agreement> {
-    await this.db.withTransactionAsync(async () => {
-      await this.db.runAsync(
-        `INSERT INTO agreements (
-          id, project_id, version_number, title,
-          budget_amount, budget_currency, budget_notes,
-          duration_days, deadline, timeline_notes,
-          revision_terms, exclusions_json, missing_info_json,
-          tax_treatment, confirmed_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
-        [
-          agreement.id,
-          agreement.projectId,
-          agreement.versionNumber,
-          agreement.title,
-          agreement.budgetAmount,
-          agreement.budgetCurrency,
-          agreement.budgetNotes,
-          agreement.durationDays,
-          agreement.deadline,
-          agreement.timelineNotes,
-          agreement.revisionTerms,
-          JSON.stringify(agreement.exclusions),
-          JSON.stringify(agreement.missingInformation),
-          agreement.taxTreatment || 'net_of_withholding',
-          agreement.confirmedAt,
-        ],
-      );
+    agreement = AgreementSchema.parse(agreement);
+    if (!this.inTransaction) return transaction(this.db, tx => new AgreementRepository(tx, true).create(agreement));
+    await this.db.runAsync(
+      `INSERT INTO agreements (
+        id, project_id, version_number, title,
+        budget_amount, budget_currency, budget_notes,
+        duration_days, deadline, timeline_notes,
+        revision_terms, exclusions_json, missing_info_json,
+        tax_treatment, confirmed_at, sealed
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0);`,
+      [
+        agreement.id,
+        agreement.projectId,
+        agreement.versionNumber,
+        agreement.title,
+        agreement.budgetAmount,
+        agreement.budgetCurrency,
+        agreement.budgetNotes,
+        agreement.durationDays,
+        agreement.deadline,
+        agreement.timelineNotes,
+        agreement.revisionTerms,
+        JSON.stringify(agreement.exclusions),
+        JSON.stringify(agreement.missingInformation),
+        agreement.taxTreatment || 'net_of_withholding',
+        agreement.confirmedAt,
+      ],
+    );
 
-      for (const req of agreement.requirements) {
-        await this.db.runAsync(
-          `INSERT INTO requirements (id, agreement_id, title, description, category)
-           VALUES (?, ?, ?, ?, ?);`,
-          [req.id, agreement.id, req.title, req.description, req.category],
-        );
-      }
-    });
+    for (const req of agreement.requirements) {
+      await this.db.runAsync(
+        `INSERT INTO requirements (id, agreement_id, title, description, category)
+         VALUES (?, ?, ?, ?, ?);`,
+        [req.id, agreement.id, req.title, req.description, req.category],
+      );
+    }
+    await this.db.runAsync('UPDATE agreements SET sealed = 1 WHERE id = ?;', [agreement.id]);
 
     return agreement;
   }
@@ -113,6 +124,7 @@ export class AgreementRepository {
   }
 
   private async mapAgreement(row: AgreementRow): Promise<Agreement> {
+    if (row.sealed !== 1) throw new ServiceError('data_integrity');
     const reqRows = await this.db.getAllAsync<RequirementRow>(
       'SELECT id, title, description, category FROM requirements WHERE agreement_id = ? ORDER BY id ASC;',
       [row.id],
@@ -125,7 +137,7 @@ export class AgreementRepository {
       category: r.category,
     }));
 
-    return {
+    return stored(AgreementSchema, {
       id: row.id,
       projectId: row.project_id,
       versionNumber: row.version_number,
@@ -138,10 +150,10 @@ export class AgreementRepository {
       deadline: row.deadline,
       timelineNotes: row.timeline_notes,
       revisionTerms: row.revision_terms,
-      exclusions: JSON.parse(row.exclusions_json || '[]'),
-      missingInformation: JSON.parse(row.missing_info_json || '[]'),
+      exclusions: storedJson(row.exclusions_json),
+      missingInformation: storedJson(row.missing_info_json),
       taxTreatment: (row.tax_treatment as TaxTreatment) || 'net_of_withholding',
       confirmedAt: row.confirmed_at,
-    };
+    });
   }
 }

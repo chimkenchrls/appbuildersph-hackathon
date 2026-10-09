@@ -1,5 +1,6 @@
+import { overallClassification } from '@/safety/persistedSchemas';
 import type * as Backend from '@/types/domain';
-import type { Agreement, Analysis, Classification, ExtractedScope, Finding, Project, Proposal, Requirement, ScopeDraft, ScopeStatus, ScopeTerms } from '@/types/workspace';
+import type { Agreement, Analysis, ExtractedScope, Finding, Project, Proposal, Requirement, ScopeDraft, ScopeStatus, ScopeTerms } from '@/types/workspace';
 
 // The backend stores a requirement as a title plus a description; the screens show one text.
 const requirementText = (item: Backend.Requirement) => {
@@ -126,8 +127,7 @@ export function toWorkspaceAnalysis(analysis: Backend.ScopeGuardAnalysis, reques
 
 /** The backend's per-analysis fields, derived from the findings the freelancer was shown. */
 export function toBackendAnalysisFields(findings: Finding[]) {
-  const has = (classification: Classification) => findings.some(finding => finding.classification === classification);
-  const classification: Classification = has('potential_additional') ? 'potential_additional' : has('needs_clarification') ? 'needs_clarification' : 'included';
+  const classification = overallClassification(findings);
   return {
     classification,
     summary: `Reviewed ${findings.length} requested ${findings.length === 1 ? 'item' : 'items'}.`,
