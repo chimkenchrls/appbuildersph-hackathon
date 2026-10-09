@@ -1,4 +1,4 @@
-export type ServiceErrorCode = 'model_unavailable' | 'generation_timeout' | 'invalid_output' | 'cancelled' | 'save_failed' | 'not_found' | 'invalid_input' | 'data_integrity' | 'conflict';
+export type ServiceErrorCode = 'model_unavailable' | 'generation_timeout' | 'input_too_long' | 'invalid_output' | 'cancelled' | 'save_failed' | 'not_found' | 'invalid_input' | 'data_integrity' | 'conflict';
 
 export class ServiceError extends Error {
   constructor(public readonly code: ServiceErrorCode, message?: string) {
@@ -12,6 +12,7 @@ export function errorMessage(error: unknown): string {
   const messages: Record<ServiceErrorCode, string> = {
     model_unavailable: 'Local AI is unavailable. You can keep working manually.',
     generation_timeout: 'Local AI took too long to respond. Your inputs are kept. Try a shorter conversation or a smaller model.',
+    input_too_long: 'This is too long for the on-device model. Shorten the conversation or request and try again. Your inputs are kept.',
     invalid_output: 'The result could not be verified against your agreement. Please try again.',
     cancelled: 'Stopped. Your inputs have been kept.',
     save_failed: 'Could not save. Your changes are still here. Try saving again.',

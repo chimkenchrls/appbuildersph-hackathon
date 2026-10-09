@@ -310,8 +310,10 @@ export function NewProjectScreen({
               </View>
             ) : llmStatus.available ? (
               <View style={styles.aiPillReady}>
-                <AppIcon name="sparkles" size={12} color="#15803D" />
-                <Text style={styles.aiPillReadyText}>Local LLM Ready · {llmStatus.model}</Text>
+                <AppIcon name={llmStatus.model.includes('On-Device') ? 'cpu' : 'sparkles'} size={12} color="#15803D" />
+                <Text style={styles.aiPillReadyText}>
+                  {llmStatus.model.includes('On-Device') ? `${llmStatus.model} · Offline` : `Local LLM Ready · ${llmStatus.model}`}
+                </Text>
               </View>
             ) : (
               <View style={styles.aiPillOffline}>

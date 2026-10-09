@@ -4,6 +4,8 @@ import { getDatabaseAsync } from '@/database/client';
 import { migrateAsync } from '@/database/migrate';
 import { seedDemoDataAsync } from '@/database/seed';
 import { LMStudioAdapter } from '@/llm/adapters/lmStudioAdapter';
+import { NativeLlamaAdapter } from '@/llm/adapters/nativeLlamaAdapter';
+import { HybridLlmAdapter } from '@/llm/adapters/hybridLlmAdapter';
 import { BriefCraftService } from './briefCraftService';
 import { KasunduanVaultService } from './kasunduanVaultService';
 import { ScopeGuardService } from './scopeGuardService';
@@ -20,7 +22,7 @@ export interface AppServices {
     changeDesk: ChangeDeskService;
     export: ExportService;
   };
-  llmEngine: LMStudioAdapter;
+  llmEngine: HybridLlmAdapter;
 }
 
 let initialization: Promise<AppServices> | null = null;
@@ -45,12 +47,30 @@ async function initialize(): Promise<AppServices> {
 
   // Explicit development configuration wins over defaults saved on first launch.
   // Keep saved settings as a fallback without rewriting existing projects or settings.
-  const llmEngine = new LMStudioAdapter({
+  const networkEngine = new LMStudioAdapter({
     getBaseUrl: async () => {
       return process.env.EXPO_PUBLIC_LM_STUDIO_URL || await settingsRepo.get('lm_studio_url') || 'http://10.0.2.2:1234/v1';
     },
     getModel: async () => {
       return process.env.EXPO_PUBLIC_LM_STUDIO_MODEL || await settingsRepo.get('lm_studio_model') || 'local-model';
+    },
+  });
+
+  const nativeEngine = new NativeLlamaAdapter({
+    getModelPath: async () => {
+      return await settingsRepo.get('on_device_model_path');
+    },
+  });
+
+  const llmEngine = new HybridLlmAdapter({
+    nativeAdapter: nativeEngine,
+    networkAdapter: networkEngine,
+    getMode: async () => {
+      const mode = await settingsRepo.get('llm_mode');
+      return (mode === 'on_device' || mode === 'network' || mode === 'auto') ? mode : 'auto';
+    },
+    setMode: async (mode) => {
+      await settingsRepo.set('llm_mode', mode);
     },
   });
 
