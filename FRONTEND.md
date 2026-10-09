@@ -10,17 +10,17 @@ Saklaw helps freelance developers and UI/UX designers turn client conversations
 into reviewed project scopes, assess new requests against those scopes, and
 prepare change proposals. The freelancer controls commitments; AI assists.
 
-| Decision | Guideline |
-| --- | --- |
-| Primary target | Android mobile app, delivered as a standalone APK. |
+| Decision            | Guideline                                                                                                                                                |
+| ------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Primary target      | Android mobile app, delivered as a standalone APK.                                                                                                       |
 | Other native target | The same shared UI supports iPhone and adaptive iPad layouts; iOS delivery remains secondary. Verify native integrations and device behavior separately. |
-| Web | Product landing page, not a browser version of the workspace. |
-| Visual direction | Calm, professional, readable; Mint Slate: dark surfaces, a muted mint accent, square corners. Dark only. |
-| Language | English interface; retain established product/module names where useful. |
-| Navigation | Project-centered stack, rather than a tab for every module. |
-| MVP input | Pasted conversations and manually entered requirements. |
-| Screenshot input | Follow-up: conversation screenshots only, local text extraction, user correction before analysis. |
-| Claude's discretion | Make routine layout, styling, and component decisions within this guide. Discuss new features, navigation changes, and dependencies first. |
+| Web                 | Product landing page, not a browser version of the workspace.                                                                                            |
+| Visual direction    | Calm, professional, readable; Mint Teal: teal-tinted dark surfaces, a clear mint accent, a deep teal brand field, square corners. Dark only.             |
+| Language            | English interface; retain established product/module names where useful.                                                                                 |
+| Navigation          | Project-centered stack, rather than a tab for every module.                                                                                              |
+| MVP input           | Pasted conversations and manually entered requirements.                                                                                                  |
+| Screenshot input    | Follow-up: conversation screenshots only, local text extraction, user correction before analysis.                                                        |
+| Claude's discretion | Make routine layout, styling, and component decisions within this guide. Discuss new features, navigation changes, and dependencies first.               |
 
 Read `AGENTS.md`, `PROJECT.md`, and `ARCHITECTURE.md` before implementation.
 Check `package.json`, `app.json`, `eas.json`, and the actual source before using
@@ -63,12 +63,12 @@ Use the existing Expo Router root. Keep route files thin and put screen
 implementations outside `src/app/`. The following is the intended route map;
 it is not a claim that these routes exist yet:
 
-| Route | Screen and purpose |
-| --- | --- |
-| `/` | Native: Dashboard. Web: landing page through a platform-specific screen. |
-| `/project/[projectId]` | Project Workspace: scope draft, confirmed agreement, requests, and compact history. |
-| `/project/[projectId]/request` | ScopeGuard: enter and analyze a new request. |
-| `/project/[projectId]/proposal/[proposalId]` | Change Proposal: edit and save a proposal draft. |
+| Route                                        | Screen and purpose                                                                  |
+| -------------------------------------------- | ----------------------------------------------------------------------------------- |
+| `/`                                          | Native: Dashboard. Web: landing page through a platform-specific screen.            |
+| `/project/[projectId]`                       | Project Workspace: scope draft, confirmed agreement, requests, and compact history. |
+| `/project/[projectId]/request`               | ScopeGuard: enter and analyze a new request.                                        |
+| `/project/[projectId]/proposal/[proposalId]` | Change Proposal: edit and save a proposal draft.                                    |
 
 BriefCraft review belongs inside the Project Workspace initially. Create a
 proposal draft record before navigating to its editor; generating its message
@@ -121,11 +121,11 @@ the landing page without loading private data or native services.
 - Present one finding per requested item when a request contains mixed work.
 - Use these exact domain values and plain English labels:
 
-| Stored value | Visible label | Meaning |
-| --- | --- | --- |
-| `included` | Included in recorded scope | Appears covered by an actual recorded requirement. |
-| `potential_additional` | Potential additional work | Appears beyond the recorded scope; requires freelancer review. |
-| `needs_clarification` | Needs clarification | Request or scope is too ambiguous for a supported conclusion. |
+| Stored value           | Visible label              | Meaning                                                        |
+| ---------------------- | -------------------------- | -------------------------------------------------------------- |
+| `included`             | Included in recorded scope | Appears covered by an actual recorded requirement.             |
+| `potential_additional` | Potential additional work  | Appears beyond the recorded scope; requires freelancer review. |
+| `needs_clarification`  | Needs clarification        | Request or scope is too ambiguous for a supported conclusion.  |
 
 - Label results as AI suggestions. Avoid verdicts such as “client violation,”
   legal guarantees, fabricated confidence percentages, or automatic pricing.
@@ -159,16 +159,16 @@ the landing page without loading private data or native services.
 Expose operation state through typed hooks and services. Saved records belong
 in SQLite; component/UI state holds current edits, selection, and progress.
 
-| State | Required frontend behavior |
-| --- | --- |
-| Initializing | Explain local preparation; do not permit writes before database readiness. |
-| Model absent/unavailable | Explain that local AI is unavailable; preserve project access and manual scope/proposal editing. |
-| Loading model | Show an honest indeterminate state unless measurable progress exists. |
-| Generating | Identify the operation, prevent duplicate submissions, and provide Stop when supported by the engine contract. |
-| Cancelled/interrupted | Preserve input and reviewed edits; identify incomplete output and offer retry. |
-| Invalid/failed result | Explain the failure, keep input, and offer retry or manual entry; do not save it as a successful analysis. |
-| Save failure | Retain the draft, keep the unsaved indicator, and offer retry. |
-| Missing record | Explain that the record is unavailable and return to its parent context. |
+| State                    | Required frontend behavior                                                                                     |
+| ------------------------ | -------------------------------------------------------------------------------------------------------------- |
+| Initializing             | Explain local preparation; do not permit writes before database readiness.                                     |
+| Model absent/unavailable | Explain that local AI is unavailable; preserve project access and manual scope/proposal editing.               |
+| Loading model            | Show an honest indeterminate state unless measurable progress exists.                                          |
+| Generating               | Identify the operation, prevent duplicate submissions, and provide Stop when supported by the engine contract. |
+| Cancelled/interrupted    | Preserve input and reviewed edits; identify incomplete output and offer retry.                                 |
+| Invalid/failed result    | Explain the failure, keep input, and offer retry or manual entry; do not save it as a successful analysis.     |
+| Save failure             | Retain the draft, keep the unsaved indicator, and offer retry.                                                 |
+| Missing record           | Explain that the record is unavailable and return to its parent context.                                       |
 
 Only complete, validated structured output becomes a usable scope or analysis.
 Streaming output, if exposed, is provisional and cannot be confirmed mid-generation.
@@ -193,29 +193,30 @@ current task. Keep marketing headlines on the landing page.
 
 Use React Native primitives and `StyleSheet`. Define shared semantic tokens in
 `src/constants/theme.ts` and consume them from reusable UI components. The
-values below are the Mint Slate tokens in that file. They were sampled from the
+values below are the Mint Teal tokens in that file. They replaced the earlier, greyer Mint Slate values on 2026-10-10 at the owner's request. They were first sampled from the
 reviewed theme preview and are approximate; the design spec
 (`docs/superpowers/specs/2026-10-09-saklaw-mobile-frontend-design.md`, section 6)
 records the contrast ratio of each pair:
 
-| Token | Value | Purpose |
-| --- | --- | --- |
-| `background` | `#0E0E11` | App canvas. |
-| `surface` | `#121216` | Forms and content surfaces. |
-| `surfaceRaised` | `#1C1C22` | Bottom action bar, pressed rows, disabled fill. |
-| `textPrimary` | `#C9CFCF` | Headings and primary text. |
-| `textSecondary` | `#939E9E` | Supporting text. |
-| `primary` | `#85ADAD` | Primary actions, focus emphasis, confirmed edge. |
-| `onPrimary` | `#0E0E11` | Text on primary actions. |
-| `border` | `#2A2A30` | Decorative separators; not the sole control boundary. |
-| `controlBorder` | `#6E7B7B` | Input boundaries and meaningful outlines. |
-| `successText` / `successSurface` | `#86D9A0` / `#11261B` | Included status. |
-| `warningText` / `warningSurface` | `#F0B866` / `#2B200E` | Potential additional work; unsaved changes. |
-| `infoText` / `infoSurface` | `#8FB4F5` / `#131E36` | Clarification required. |
-| `errorText` / `errorSurface` | `#F2A0A0` / `#2E1516` | Failed operations and validation errors. |
-| `aiText` / `aiSurface` | `#CDB4DD` / `#36293D` | AI suggestions. |
+| Token                            | Value                 | Purpose                                                                                 |
+| -------------------------------- | --------------------- | --------------------------------------------------------------------------------------- |
+| `background`                     | `#0B1214`             | App canvas.                                                                             |
+| `surface`                        | `#111C1F`             | Forms and content surfaces.                                                             |
+| `surfaceRaised`                  | `#1A2A2E`             | Bottom action bar, pressed rows, disabled fill.                                         |
+| `textPrimary`                    | `#E8F0EE`             | Headings and primary text.                                                              |
+| `textSecondary`                  | `#9DB2B0`             | Supporting text.                                                                        |
+| `primary`                        | `#86D3C5`             | Primary actions, focus emphasis, confirmed edge.                                        |
+| `onPrimary`                      | `#0B1214`             | Text on primary actions.                                                                |
+| `brand` / `onBrand`              | `#2C6E78` / `#F0F8F6` | Kwagi's body teal, for large brand fields such as landing page bands. Not for controls. |
+| `border`                         | `#263A3E`             | Decorative separators; not the sole control boundary.                                   |
+| `controlBorder`                  | `#6F8C8C`             | Input boundaries and meaningful outlines.                                               |
+| `successText` / `successSurface` | `#86D9A0` / `#11261B` | Included status.                                                                        |
+| `warningText` / `warningSurface` | `#F0B866` / `#2B200E` | Potential additional work; unsaved changes.                                             |
+| `infoText` / `infoSurface`       | `#8FB4F5` / `#131E36` | Clarification required.                                                                 |
+| `errorText` / `errorSurface`     | `#F2A0A0` / `#2E1516` | Failed operations and validation errors.                                                |
+| `aiText` / `aiSurface`           | `#CDB4DD` / `#36293D` | AI suggestions.                                                                         |
 
-- Use system sans-serif fonts for reading and the system monospace font for
+- Use Geist fonts for reading and the system monospace font for
   requirement IDs, version labels, and badges. Bundle any later custom font locally;
   do not fetch it at runtime.
 - Default body/input text to 16, supporting text to 14, headings to 22–28,

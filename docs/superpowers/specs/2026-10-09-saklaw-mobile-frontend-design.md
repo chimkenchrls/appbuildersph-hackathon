@@ -53,7 +53,7 @@ contracts.
 | Build order | Contract first, then screens in demo order | Teammates build to the same shapes from hour 1; if time runs out, the front of the flow works. |
 | Contract split | Two interfaces: `SaklawData` (backend) and `SaklawAi` (local AI) | One file per teammate to implement. |
 | Native platforms | Shared Android and iOS screens; Android APK is the release priority | Keep product behavior consistent while adapting safe areas, keyboard behavior, accessibility, and navigation to each platform. |
-| Theme | Mint Slate, dark only | Chosen by the front-end owner. Closest of the three candidates to the previously agreed teal. |
+| Theme | Mint Teal, dark only (was Mint Slate until 2026-10-10) | Chosen by the front-end owner. Closest of the three candidates to the previously agreed teal. |
 | Fonts | System sans-serif for reading; system monospace for IDs, versions, and badges | Keeps the Mint Slate character with no bundled font files. |
 | Corners | Radius 0 everywhere | Matches the theme. |
 | Icons | `@react-native-vector-icons/lucide` behind an `Icon` wrapper | Expo's icon guide marks `@expo/vector-icons` as not recommended and points to this family. |
@@ -408,22 +408,24 @@ cannot break the web export.
 
 ## 6. Theme — `src/constants/theme.ts`
 
-Colors were sampled from the theme screenshot and are approximate; correcting them is a
+The values below are Mint Teal, which replaced the first Mint Slate sampling on 2026-10-10:
+teal-tinted neutrals, brighter text, a clearer mint, and a `brand` teal. Changing them is a
 one-file change. All pairs were contrast-checked (text ≥ 4.5:1, control outlines ≥ 3:1).
 
 | Token | Value | Use | Contrast |
 | --- | --- | --- | --- |
-| `background` | `#0E0E11` | App canvas | |
-| `surface` | `#121216` | Forms and content blocks | |
-| `surfaceRaised` | `#1C1C22` | Bottom action bar, pressed rows, disabled fill | |
-| `textPrimary` | `#C9CFCF` | Headings and body | 12.2:1 on background |
-| `textSecondary` | `#939E9E` | Supporting text | 7.0:1 on background, 6.2:1 on raised |
-| `primary` | `#85ADAD` | Primary actions, focus, confirmed edge | 7.6:1 as text on surface |
-| `onPrimary` | `#0E0E11` | Text on primary | 7.9:1 |
-| `primaryPressed` | `#6F9595` | Pressed primary | 5.9:1 with `onPrimary` |
-| `border` | `#2A2A30` | Decorative separators only | |
-| `controlBorder` | `#6E7B7B` | Input outlines, secondary buttons | 4.3:1 on surface |
-| `disabledText` | `#6E7B7B` | Disabled labels | |
+| `background` | `#0B1214` | App canvas | |
+| `surface` | `#111C1F` | Forms and content blocks | |
+| `surfaceRaised` | `#1A2A2E` | Bottom action bar, pressed rows, disabled fill | |
+| `textPrimary` | `#E8F0EE` | Headings and body | 16.3:1 on background |
+| `textSecondary` | `#9DB2B0` | Supporting text | 8.5:1 on background, 6.7:1 on raised |
+| `primary` | `#86D3C5` | Primary actions, focus, confirmed edge | 10.0:1 as text on surface |
+| `onPrimary` | `#0B1214` | Text on primary | 10.9:1 |
+| `primaryPressed` | `#68B8AA` | Pressed primary | 8.1:1 with `onPrimary` |
+| `brand` / `onBrand` | `#2C6E78` / `#F0F8F6` | Large brand fields (landing page bands); not for controls | 5.4:1 |
+| `border` | `#263A3E` | Decorative separators only | |
+| `controlBorder` | `#6F8C8C` | Input outlines, secondary buttons | 4.8:1 on surface, 4.1:1 on raised |
+| `disabledText` | `#6F8C8C` | Disabled labels | |
 | `successText` / `successSurface` | `#86D9A0` / `#11261B` | Included in recorded scope | 9.5:1 |
 | `warningText` / `warningSurface` | `#F0B866` / `#2B200E` | Potential additional work; unsaved changes | 8.9:1 |
 | `infoText` / `infoSurface` | `#8FB4F5` / `#131E36` | Needs clarification | 7.9:1 |

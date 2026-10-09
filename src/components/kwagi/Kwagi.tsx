@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  AccessibilityInfo,
   Animated,
   Easing,
   Platform,
@@ -8,6 +7,8 @@ import {
   StyleSheet,
   View,
 } from 'react-native';
+
+import { useReduceMotion } from '@/hooks/useReduceMotion';
 
 import {
   KWAGI_ASPECT_RATIO,
@@ -23,6 +24,12 @@ type KwagiProps = {
   size?: number;
   /** Wave once when Kwagi first appears. */
   waveOnMount?: boolean;
+  /** Wave when pressed. Turn off where the owner decides when he waves. */
+  waveOnPress?: boolean;
+  /** He waves each time this number changes to a new non-zero value. */
+  waveSignal?: number;
+  /** Called when Kwagi is pressed. */
+  onPress?: () => void;
 };
 
 // Transform and opacity run on the native driver; react-native-web has no native driver.
@@ -37,26 +44,7 @@ const BLINK_CLOSED_MS = 110;
 const WAVE_UP = -115;
 const WAVE_OUT = -80;
 
-function useReduceMotion() {
-  const [reduceMotion, setReduceMotion] = useState(false);
-
-  useEffect(() => {
-    let active = true;
-    AccessibilityInfo.isReduceMotionEnabled().then((enabled) => {
-      if (active) setReduceMotion(enabled);
-    });
-    const subscription = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
-    return () => {
-      active = false;
-      // react-native-web returns nothing here when the browser lacks matchMedia.
-      subscription?.remove();
-    };
-  }, []);
-
-  return reduceMotion;
-}
-
-export function Kwagi({ size = 200, waveOnMount = true }: KwagiProps) {
+export function Kwagi({ size = 200, waveOnMount = true, waveOnPress = true, waveSignal = 0, onPress }: KwagiProps) {
   const reduceMotion = useReduceMotion();
   // useState, not react-native's useAnimatedValue: react-native-web does not export that hook.
   const [eyesOpen] = useState(() => new Animated.Value(1));
@@ -134,6 +122,10 @@ export function Kwagi({ size = 200, waveOnMount = true }: KwagiProps) {
   }, [reduceMotion, wave, waveOnMount]);
 
   useEffect(() => {
+    if (waveSignal) wave();
+  }, [wave, waveSignal]);
+
+  useEffect(() => {
     if (!reduceMotion) return;
     wingAngle.stopAnimation();
     wingAngle.setValue(0);
@@ -145,7 +137,10 @@ export function Kwagi({ size = 200, waveOnMount = true }: KwagiProps) {
   return (
     // Decorative: the text beside Kwagi carries the meaning, so screen readers skip him.
     <Pressable
-      onPress={wave}
+      onPress={() => {
+        if (waveOnPress) wave();
+        onPress?.();
+      }}
       accessible={false}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"

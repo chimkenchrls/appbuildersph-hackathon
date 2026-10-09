@@ -11,6 +11,8 @@ He is a **calm, watchful ally**: quiet, observant, reassuring. He notices things
 
 Kwagi is **not the official logo**. He is a character who appears alongside the brand. The app's logo and wordmark are a separate decision.
 
+His owl identity connects to freelancers working with international clients across time zones. His watchfulness represents care with project details, while his calm personality supports clear communication and healthy boundaries. [ABOUT_KWAGI.md](./ABOUT_KWAGI.md) contains the public-facing story and implementation notes.
+
 ## 2. Where he appears
 
 | Surface | Use | Status |
@@ -66,8 +68,9 @@ On the app's deep teal surfaces he needs a light backing shape, since his body i
 **Web landing page.** Behaviour comes from the page-mascot component.
 
 - **Directions:** his head turns to one of eight directions toward the cursor, and faces forward when the cursor is close. Touch devices show the forward frame.
-- **Reactions on click:** a blink, then heart, sparkle or delighted in turn. Four quick clicks give dizzy.
-- **Squash:** he squashes slightly on click. This is the component's default and is switched off under reduced motion; it is the one place he is livelier than the rest of this brief.
+- **Reactions on click:** a blink, then heart, sparkle or delighted in turn. The reaction holds for about 1.4 seconds, and for as long as the cursor rests on him, then fades back to his normal face. Four quick clicks give dizzy, which lasts about 1.8 seconds.
+- **Dizzy from the cursor:** swinging the cursor around him by two full turns within three seconds, while it is within 360 pixels of him, also makes him dizzy. It cannot trigger again for about four seconds afterwards.
+- **No movement on click:** only his expression changes. The component's default squash was removed at the owner's request.
 
 Motion otherwise stays slow and small. A thinking pose and poses for findings or problem states are not built.
 
@@ -97,6 +100,8 @@ Two 3×3 sheets, built with the page-mascot skill from the sources in `character
 Rebuild the atlases from the project root with the skill's
 `scripts/mascot.py kwagi --skip-generate` (needs Pillow, NumPy and SciPy). It aligns the
 two sheets and writes `public/mascots/kwagi-{directions,reactions}.webp`.
+Then run `python3 scripts/align_kwagi_reactions.py` (Pillow and NumPy). It moves and scales the
+reaction frames to match the forward-facing frame, so Kwagi stays in place when clicked.
 `scripts/generate_mascot_gemini.py` can regenerate sheets with a `GEMINI_API_KEY`; generated
 sheets need checking by eye, because the build's checks do not catch wrong expressions or
 turned heads.
@@ -144,7 +149,7 @@ There is no head-only variant yet. The app icon will need one.
 | `src/components/kwagi/KwagiArt.tsx` | Generated layered art. Do not edit by hand. |
 | `src/components/kwagi/PageMascot.tsx` | Web-only cursor-following component, copied from the page-mascot skill. |
 | `src/screens/HomeScreen.tsx` | Native home screen showing the app Kwagi. |
-| `src/screens/HomeScreen.web.tsx` | Web landing screen showing the cursor-following Kwagi. `EXPO_PUBLIC_KWAGI_WEB_PREVIEW=1` also shows the app Kwagi there for testing; this switch is temporary. |
+| `src/screens/RootScreen.web.tsx` | Web landing screen showing the cursor-following Kwagi. `EXPO_PUBLIC_KWAGI_WEB_PREVIEW=1` also shows the app Kwagi there for testing; this switch is temporary. |
 | `scripts/build_kwagi_app.py` | Source of the app drawing. |
 | `scripts/generate_mascot_gemini.py` | Optional Gemini generation of sprite sheets. |
 | `assets/mascot/kwagi-full.svg` | Static picture of the app drawing. |
@@ -159,5 +164,4 @@ Still to make: the app icon, the splash image, and any pitch animation.
 
 ## 10. Open decisions
 
-- **Squash on click (web):** keep the component's bounce, or remove it to match the calm brief?
 - **Cultural check:** owls are a bad omen in some Filipino folk beliefs. Show the artwork to a few people outside the team before it goes on the icon.

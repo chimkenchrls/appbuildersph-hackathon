@@ -1,19 +1,23 @@
 import { Platform, type TextStyle } from 'react-native';
 
-// Mint Slate (dark only). Values were sampled from the reviewed theme preview;
-// contrast ratios are recorded in the design spec, section 6.
+// Mint Teal (dark only). Neutrals are tinted toward the mascot's teal, text is brighter,
+// and the mint accent carries more colour than the earlier Mint Slate values.
+// Contrast ratios are recorded in the design spec, section 6.
 export const colors = {
-  background: '#0E0E11',
-  surface: '#121216',
-  surfaceRaised: '#1C1C22',
-  textPrimary: '#C9CFCF',
-  textSecondary: '#939E9E',
-  primary: '#85ADAD',
-  onPrimary: '#0E0E11',
-  primaryPressed: '#6F9595',
-  border: '#2A2A30',
-  controlBorder: '#6E7B7B',
-  disabledText: '#6E7B7B',
+  background: '#0B1214',
+  surface: '#111C1F',
+  surfaceRaised: '#1A2A2E',
+  textPrimary: '#E8F0EE',
+  textSecondary: '#9DB2B0',
+  primary: '#86D3C5',
+  onPrimary: '#0B1214',
+  primaryPressed: '#68B8AA',
+  // Kwagi's body teal, for large brand fields. Not for controls.
+  brand: '#2C6E78',
+  onBrand: '#F0F8F6',
+  border: '#263A3E',
+  controlBorder: '#6F8C8C',
+  disabledText: '#6F8C8C',
   successText: '#86D9A0',
   successSurface: '#11261B',
   warningText: '#F0B866',

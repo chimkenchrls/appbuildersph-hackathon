@@ -72,7 +72,7 @@ npx expo-doctor
 src/
   app/                    # Expo Router route definitions and root layout
   components/ui/          # Shared UI components (Screen, Button, TextField, StatusBadge, ...)
-  constants/theme.ts      # Mint Slate design tokens
+  constants/theme.ts      # Mint Teal design tokens
   database/
     client.ts             # SQLite connection and foreign key pragmas
     migrate.ts            # Migration execution runner
