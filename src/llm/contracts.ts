@@ -21,6 +21,13 @@ export class LLMEngineUnavailableError extends Error {
   }
 }
 
+export class LLMGenerationTimeoutError extends Error {
+  constructor(message = 'Local generation timed out') {
+    super(message);
+    this.name = 'LLMGenerationTimeoutError';
+  }
+}
+
 export class LLMParseError extends Error {
   constructor(
     message: string,

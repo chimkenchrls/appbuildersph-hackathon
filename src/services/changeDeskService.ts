@@ -1,6 +1,7 @@
 import type { LLMEngine } from '@/llm/contracts';
 import { parseAndValidateJson } from '@/llm/jsonParser';
 import { buildChangeDeskPrompt } from '@/llm/prompts/changeDeskPrompt';
+import { composeProposalMessage } from '@/safety/proposalMessage';
 import { ChangeDeskRawOutputSchema } from '@/types/schemas';
 import type { AgreementRepository } from '@/database/repositories/agreementRepository';
 import type { ScopeGuardRepository } from '@/database/repositories/scopeGuardRepository';
@@ -44,13 +45,7 @@ export class ChangeDeskService {
     const agreement = await this.agreementRepo.getById(analysis.agreementId);
     const agreementTitle = agreement ? agreement.title : 'Initial Agreement';
 
-    const messages = buildChangeDeskPrompt({
-      agreementTitle,
-      selectedItems,
-      feeEstimate: freelancerFeeEstimate,
-      daysEstimate: freelancerDaysEstimate,
-      currency,
-    });
+    const messages = buildChangeDeskPrompt({ agreementTitle, selectedItems });
 
     const rawOutput = await this.engine.generate(messages, {
       temperature: 0.4,
@@ -70,7 +65,12 @@ export class ChangeDeskService {
       freelancerFeeEstimate,
       freelancerDaysEstimate,
       currency,
-      draftMessage: parsed.draft_message,
+      draftMessage: composeProposalMessage(parsed.draft_message, {
+        deliverables: selectedItems,
+        feeAmount: freelancerFeeEstimate,
+        currency,
+        extraWorkingDays: freelancerDaysEstimate,
+      }),
       status: 'draft',
       createdAt: now,
       updatedAt: now,

@@ -1,11 +1,8 @@
+import { repositories, type Repositories } from '@/database/repositories';
+import { transaction } from '@/database/transaction';
 import { getDatabaseAsync } from '@/database/client';
 import { migrateAsync } from '@/database/migrate';
 import { seedDemoDataAsync } from '@/database/seed';
-import { ProjectRepository } from '@/database/repositories/projectRepository';
-import { AgreementRepository } from '@/database/repositories/agreementRepository';
-import { ScopeGuardRepository } from '@/database/repositories/scopeGuardRepository';
-import { ProposalRepository } from '@/database/repositories/proposalRepository';
-import { SettingsRepository } from '@/database/repositories/settingsRepository';
 import { LMStudioAdapter } from '@/llm/adapters/lmStudioAdapter';
 import { BriefCraftService } from './briefCraftService';
 import { KasunduanVaultService } from './kasunduanVaultService';
@@ -14,13 +11,8 @@ import { ChangeDeskService } from './changeDeskService';
 import { ExportService } from './exportService';
 
 export interface AppServices {
-  repositories: {
-    project: ProjectRepository;
-    agreement: AgreementRepository;
-    scopeGuard: ScopeGuardRepository;
-    proposal: ProposalRepository;
-    settings: SettingsRepository;
-  };
+  transaction<T>(action: (repos: Repositories) => Promise<T>): Promise<T>;
+  repositories: Repositories;
   services: {
     briefCraft: BriefCraftService;
     kasunduanVault: KasunduanVaultService;
@@ -31,13 +23,14 @@ export interface AppServices {
   llmEngine: LMStudioAdapter;
 }
 
-let servicesInstance: AppServices | null = null;
+let initialization: Promise<AppServices> | null = null;
 
-export async function initializeBackendAsync(): Promise<AppServices> {
-  if (servicesInstance) {
-    return servicesInstance;
-  }
+export function initializeBackendAsync(): Promise<AppServices> {
+  if (!initialization) initialization = initialize().catch(error => { initialization = null; throw error; });
+  return initialization;
+}
 
+async function initialize(): Promise<AppServices> {
   const db = await getDatabaseAsync();
 
   // 1. Run migrations
@@ -47,21 +40,17 @@ export async function initializeBackendAsync(): Promise<AppServices> {
   await seedDemoDataAsync(db);
 
   // 3. Initialize Repositories
-  const projectRepo = new ProjectRepository(db);
-  const agreementRepo = new AgreementRepository(db);
-  const scopeGuardRepo = new ScopeGuardRepository(db);
-  const proposalRepo = new ProposalRepository(db);
-  const settingsRepo = new SettingsRepository(db);
+  const repos = repositories(db);
+  const { agreement: agreementRepo, scopeGuard: scopeGuardRepo, proposal: proposalRepo, settings: settingsRepo } = repos;
 
-  // 4. Initialize LLM Adapter with dynamic settings lookup
+  // Explicit development configuration wins over defaults saved on first launch.
+  // Keep saved settings as a fallback without rewriting existing projects or settings.
   const llmEngine = new LMStudioAdapter({
     getBaseUrl: async () => {
-      const saved = await settingsRepo.get('lm_studio_url');
-      return saved || process.env.EXPO_PUBLIC_LM_STUDIO_URL || 'http://10.0.2.2:1234/v1';
+      return process.env.EXPO_PUBLIC_LM_STUDIO_URL || await settingsRepo.get('lm_studio_url') || 'http://10.0.2.2:1234/v1';
     },
     getModel: async () => {
-      const saved = await settingsRepo.get('lm_studio_model');
-      return saved || process.env.EXPO_PUBLIC_LM_STUDIO_MODEL || 'local-model';
+      return process.env.EXPO_PUBLIC_LM_STUDIO_MODEL || await settingsRepo.get('lm_studio_model') || 'local-model';
     },
   });
 
@@ -70,16 +59,11 @@ export async function initializeBackendAsync(): Promise<AppServices> {
   const kasunduanVault = new KasunduanVaultService(agreementRepo);
   const scopeGuard = new ScopeGuardService(llmEngine, agreementRepo, scopeGuardRepo);
   const changeDesk = new ChangeDeskService(llmEngine, agreementRepo, scopeGuardRepo, proposalRepo);
-  const exportService = new ExportService(projectRepo, agreementRepo, scopeGuardRepo, proposalRepo);
+  const exportService = new ExportService(db);
 
-  servicesInstance = {
-    repositories: {
-      project: projectRepo,
-      agreement: agreementRepo,
-      scopeGuard: scopeGuardRepo,
-      proposal: proposalRepo,
-      settings: settingsRepo,
-    },
+  return {
+    transaction: action => transaction(db, tx => action(repositories(tx, true))),
+    repositories: repos,
     services: {
       briefCraft,
       kasunduanVault,
@@ -89,6 +73,4 @@ export async function initializeBackendAsync(): Promise<AppServices> {
     },
     llmEngine,
   };
-
-  return servicesInstance;
 }

@@ -6,13 +6,30 @@
 **Plan:** [2026-10-09 mobile frontend implementation plan](./plans/2026-10-09-saklaw-mobile-frontend.md)
 **Design specification:** [Saklaw mobile frontend design](./specs/2026-10-09-saklaw-mobile-frontend-design.md)
 
+**2026-10-10 persistence update:** See [the repair note](./PERSISTENCE-REPAIR-2026-10-10.md) for atomic saves, validation, migration 3, and device acceptance. Fresh checks: 119 tests in nine suites, lint, type checking, and web export passed. Money migration is deferred by user choice. Android testing belongs to the team; these changes are not device-verified. Earlier counts below are historical.
+
+**Earlier verification and integration review:** See the
+[2026-10-09 integration audit and Android test checklist](./INTEGRATION-AUDIT-2026-10-09.md).
+It supersedes the historical verification counts below: 63 tests in seven suites,
+lint, type checking, online dependency checks, Doctor, and web/Android JavaScript
+exports passed on `10f3053`. Native builds, devices, and offline acceptance remain pending.
+
+**Subsequent LM Studio fixes and live results:** See the
+[LM Studio test note](./LM-STUDIO-TEST-2026-10-09.md). The current feature-branch
+working tree has configuration precedence, model readiness, direct-answer requests,
+and timeout feedback fixes. All 74 tests, lint, and type checking pass. Real Qwen
+extraction, analysis, and proposal generation passed from Node over LAN; verification
+inside the iPhone app remains pending. These fixes are uncommitted and unpushed.
+
 ## Instructions for the next agent
 
-The front-end work and the merge of `origin/main` are committed locally on
-`pandesal-branch`; the backend routing is uncommitted. Do not push, merge to `main`, deploy, or
+The front-end work, merge of `origin/main`, and backend routing are committed locally on
+`pandesal-branch` (latest inspected commit `10f3053`). Do not push, merge to `main`, deploy, or
 reset the checkout; the front-end owner reviews and tests first. Use the design
 specification as the product authority. Fixtures stay labeled, and the app must not be
-connected to the development FastAPI/LM Studio server.
+connected to the development FastAPI/LM Studio server as part of this review.
+Normal backend mode currently selects the LM Studio HTTP adapter; the offline
+release still requires a native engine.
 
 ## What exists now
 
@@ -96,8 +113,8 @@ Studio server. No device or emulator was available.
 3. **Independent review** of the full diff.
 4. Check the blur-save window on real SQLite: `useWorkspace` ignores edits while a save is
    in flight (see the plan's execution notes).
-5. The backend seeds a demo project into SQLite. It appears in the project list without a
-   demo label.
+5. Newly seeded SQLite sample projects have a Demo title. Existing sample projects are
+   preserved, including their previous titles; partial historical seeds are not auto-repaired.
 
 ## Decisions made during implementation
 

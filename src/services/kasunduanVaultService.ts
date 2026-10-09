@@ -14,17 +14,14 @@ export class KasunduanVaultService {
       throw new Error('Cannot confirm an empty scope. At least one deliverable is required.');
     }
 
-    const existingAgreements = await this.agreementRepo.listByProjectId(projectId);
-    const nextVersion = existingAgreements.length > 0 ? existingAgreements[0].versionNumber + 1 : 1;
-
     const id = `agmt_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     const now = new Date().toISOString();
-    const title = customTitle?.trim() || `${draft.title}: Agreement v${nextVersion}`;
+    const title = customTitle?.trim() || `${draft.title}: Agreement v1`;
 
     const agreement: Agreement = {
       id,
       projectId,
-      versionNumber: nextVersion,
+      versionNumber: 1,
       title,
       requirements: draft.requirements,
       budgetAmount: draft.budgetAmount,
@@ -40,7 +37,7 @@ export class KasunduanVaultService {
       confirmedAt: now,
     };
 
-    return this.agreementRepo.create(agreement);
+    return this.agreementRepo.createInitial(agreement);
   }
 
   generateContract(agreement: Agreement, options?: ContractOptions): string {

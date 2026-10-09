@@ -19,7 +19,7 @@ OwlSet is an offline-first mobile workspace for freelance developers and designe
   * Republic Act No. 10173 (Data Privacy Act of 2012) confidentiality standards.
   * Ready-to-sign mutual signature blocks.
 * **Native Sharing Service:** Summons the native device share sheet via `Share.share()` for offline dispatch to messaging apps, email, or cloud storage without third-party servers or API keys.
-* **Portable Offline Backup:** Full project backup and restore via self-contained JSON exports (`ExportService`).
+* **Portable Offline Backup:** Versioned, validated JSON snapshots include reviewed drafts and preserve timestamps. Restore is atomic and rejects conflicting saved records (`ExportService`; not exposed by the four-screen UI yet).
 
 ---
 
@@ -29,7 +29,7 @@ OwlSet is an offline-first mobile workspace for freelance developers and designe
 * **Navigation:** Expo Router (`src/app/`).
 * **Local Database:** `expo-sqlite` with write-ahead logging (WAL mode) and sequential versioned migrations (`src/database/migrations/`).
 * **Validation:** Zod schema validation for all domain records and LLM outputs (`src/types/schemas.ts`).
-* **Inference Engine:** On-device local LLM engine via LM Studio HTTP bridge (`LMStudioAdapter`), connecting via `http://10.0.2.2:1234/v1` on Android and `http://127.0.0.1:1234/v1` on iOS and Web.
+* **Inference Engine:** LM Studio HTTP adapter (`LMStudioAdapter`) for development testing. Physical devices use the computer's LAN address. Embedded on-device inference remains an integration task.
 
 ---
 
@@ -63,6 +63,24 @@ npx expo-doctor
   ```sh
   npm run android
   ```
+
+For LM Studio testing, set `EXPO_PUBLIC_LM_STUDIO_URL` to the server's `/v1`
+address and `EXPO_PUBLIC_LM_STUDIO_MODEL` to an exact ID listed by `/v1/models`.
+On a physical iPhone or Android phone, enable LM Studio's local-network server
+binding and use the computer's LAN IP, not the phone's localhost. Keep fixtures
+disabled for real inference.
+
+Explicit environment values override LM Studio settings previously saved in
+SQLite; saved settings remain the fallback when those values are absent. Restart
+Metro with `npx expo start --clear` and reload the app after changing `.env`.
+Existing project data does not need to be deleted. The Ready state checks that
+the configured model is listed by the server; it does not guarantee generation
+speed or output quality. LM Studio requests use `reasoning_effort: "none"` to
+reserve the output budget for the final answer; this was verified against Qwen
+3.5 9B on the development server. The adapter's 60-second deadline covers the
+complete response. A generation timeout offers retry guidance without treating
+the server as unreachable. Avoid loading duplicate large model instances on
+memory-constrained development machines.
 
 ---
 
@@ -157,3 +175,5 @@ npx eas-cli@latest build --platform android --profile apk
 ```
 
 Both profiles output standalone `.apk` packages that install directly on physical Android hardware for 100% offline use.
+
+Persistence repairs are documented in [the 2026-10-10 repair note](docs/superpowers/PERSISTENCE-REPAIR-2026-10-10.md), including migration compatibility and the team's device checklist. Related screen saves now commit atomically, confirmed clauses are protected, and new proposal days must be whole numbers. Money remains in main units pending a separate centavo migration. Existing fractional days are kept; explicitly correct them before resaving or exporting that project. Native upgrade/relaunch and standalone APK acceptance still require team testing.

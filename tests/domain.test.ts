@@ -1,6 +1,7 @@
 import { createFixtureData } from '@/services/fixtures/fixtureData';
 import { setFixtureControls } from '@/services/fixtures/fixtureControls';
 import { createWorkflows } from '@/services/workflows';
+import { parseWorkingDays } from '@/safety/parseEstimate';
 import { parseEstimate } from '@/safety/parseEstimate';
 import { validateFindings } from '@/safety/validateFindings';
 import type { SaklawAi } from '@/services/contracts';
@@ -123,5 +124,18 @@ describe('validated workflow candidates', () => {
     const lateAi = { ...ai, analyzeRequest: async (_: Agreement, text: string) => { controller.abort(); return [finding]; } };
     await expect(createWorkflows(data, lateAi).analyzeRequest(project.id, 'Accounts', controller.signal)).rejects.toMatchObject({ code: 'cancelled' });
     expect(await data.listAnalyses(project.id)).toEqual([]);
+  });
+});
+
+describe('whole working days', () => {
+  test.each([['', null], ['0', 0], [' 5 ', 5]])('accepts %s', (input, expected) => expect(parseWorkingDays(input)).toBe(expected));
+  test.each(['1.5', '-1', '1e3', 'NaN'])('rejects %s', input => expect(() => parseWorkingDays(input)).toThrow());
+  test('fixture saves reject fractional days without changing a saved proposal', async () => {
+    const { data, project, agreement } = await setup();
+    const analysis = await data.saveAnalysis({ projectId: project.id, agreementId: agreement.id, agreementVersion: 1,
+      requestText: 'Add accounts', findings: [finding] });
+    const proposal = await data.createProposal(project.id, analysis.id, ['Accounts']);
+    await expect(data.saveProposal({ ...proposal, extraWorkingDays: 1.5 })).rejects.toMatchObject({ code: 'invalid_input' });
+    expect((await data.getProposal(project.id, proposal.id))?.extraWorkingDays).toBeNull();
   });
 });

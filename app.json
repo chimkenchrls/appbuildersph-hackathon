@@ -11,6 +11,9 @@
     "ios": {
       "supportsTablet": true
     },
+    "android": {
+      "package": "com.saklaw.dds"
+    },
     "web": {
       "bundler": "metro",
       "output": "single"
@@ -19,7 +22,15 @@
       "expo-router",
       "expo-status-bar",
       "expo-sqlite",
-      "@react-native-vector-icons/lucide"
-    ]
+      "llama.rn",
+      "@react-native-vector-icons/lucide",
+      ["expo-build-properties", { "android": { "usesCleartextTraffic": true } }]
+    ],
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "e9284596-ad69-4623-812b-67cf09bf51f7"
+      }
+    }
   }
 }

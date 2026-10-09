@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import type { LLMEngine, LLMMessage, GenerationOptions } from '../contracts';
-import { LLMEngineUnavailableError } from '../contracts';
+import { LLMEngineUnavailableError, LLMGenerationTimeoutError } from '../contracts';
 
 export interface LMStudioAdapterConfig {
   getBaseUrl?: () => Promise<string>;
@@ -14,7 +14,7 @@ export class LMStudioAdapter implements LLMEngine {
   private readonly getModel: () => Promise<string>;
 
   constructor(config: LMStudioAdapterConfig = {}) {
-    this.timeoutMs = config.timeoutMs ?? 60000;
+    this.timeoutMs = config.timeoutMs ?? 120000;
 
     const defaultUrl = Platform.OS === 'android' ? 'http://10.0.2.2:1234/v1' : 'http://localhost:1234/v1';
 
@@ -23,20 +23,26 @@ export class LMStudioAdapter implements LLMEngine {
   }
 
   async isAvailable(): Promise<boolean> {
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 6000);
     try {
       const baseUrl = await this.getBaseUrl();
-      const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 3000);
+      const model = await this.getModel();
 
       const response = await fetch(`${baseUrl}/models`, {
         method: 'GET',
         signal: controller.signal,
       });
 
-      clearTimeout(timer);
-      return response.ok;
+      if (!response.ok) return false;
+      const listing = await response.json() as { data?: unknown } | null;
+      return Array.isArray(listing?.data) && listing.data.some((entry: unknown) =>
+        entry !== null && typeof entry === 'object' && 'id' in entry && entry.id === model,
+      );
     } catch {
       return false;
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -58,11 +64,11 @@ export class LMStudioAdapter implements LLMEngine {
           messages,
           temperature: options.temperature ?? 0.1,
           max_tokens: options.maxTokens ?? 1024,
+          // Saklaw needs the final structured answer within its token/time budget.
+          reasoning_effort: 'none',
         }),
         signal: controller.signal,
       });
-
-      clearTimeout(timer);
 
       if (!response.ok) {
         const errorText = await response.text();
@@ -80,14 +86,16 @@ export class LMStudioAdapter implements LLMEngine {
 
       return content;
     } catch (err) {
-      clearTimeout(timer);
-      if ((err as Error).name === 'AbortError') {
-        throw new LLMEngineUnavailableError(`Request timed out after ${this.timeoutMs}ms`);
+      if (controller.signal.aborted) {
+        throw new LLMGenerationTimeoutError(`Request timed out after ${this.timeoutMs}ms`);
       }
       if (err instanceof LLMEngineUnavailableError) {
         throw err;
       }
       throw new LLMEngineUnavailableError(`Failed to communicate with LM Studio: ${(err as Error).message}`);
+    } finally {
+      // Keep the deadline active until the entire response has been consumed.
+      clearTimeout(timer);
     }
   }
 }

@@ -204,3 +204,13 @@ test('a failed extraction keeps the pasted text and leaves one manual-entry acti
   expect(screen.getAllByRole('button', { name: 'Enter scope manually' })).toHaveLength(1);
   expect(await data.getDraft(project.id)).toBeNull();
 }, 15000);
+
+test('fractional working days block saving and keep the user input for correction', async () => {
+  const { project, proposal } = await draftProposal('Whole-day screen test');
+  await render(<ProposalScreen projectId={project.id} proposalId={proposal.id} />);
+  await fireEvent.changeText(await screen.findByLabelText('Extra working days'), '1.5');
+  expect(screen.getByText(/whole number of non-negative working days/)).toBeTruthy();
+  expect(screen.getByRole('button', { name: 'Save draft' })).toBeDisabled();
+  expect(screen.getByLabelText('Extra working days').props.value).toBe('1.5');
+  expect((await data.getProposal(project.id, proposal.id))?.extraWorkingDays).toBeNull();
+});

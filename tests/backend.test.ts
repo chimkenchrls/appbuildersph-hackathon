@@ -1,6 +1,7 @@
 import { KasunduanVaultService } from '@/services/kasunduanVaultService';
 import { BriefCraftService } from '@/services/briefCraftService';
-import { LLMEngineUnavailableError, type LLMEngine } from '@/llm/contracts';
+import { LLMEngineUnavailableError, LLMGenerationTimeoutError, type LLMEngine } from '@/llm/contracts';
+import { errorMessage } from '@/services/errors';
 import { createBackendAi } from '@/services/backend/backendAi';
 import { createBackendData } from '@/services/backend/backendData';
 import { toBackendDraft, toWorkspaceAgreement, toWorkspaceFindings } from '@/services/backend/mappers';
@@ -19,6 +20,10 @@ function fakePorts(engine: LLMEngine) {
   const settings = new Map<string, string>();
   const now = () => new Date().toISOString();
   const agreementRepo = {
+    async createInitial(a: Agreement) {
+      if ([...agreements.values()].some(existing => existing.projectId === a.projectId)) throw new Error('Already confirmed');
+      agreements.set(a.id, a); return a;
+    },
     async create(a: Agreement) { agreements.set(a.id, a); return a; },
     async getById(id: string) { return agreements.get(id) ?? null; },
     async getLatestByProjectId(projectId: string) {
@@ -29,6 +34,7 @@ function fakePorts(engine: LLMEngine) {
     },
   };
   const ports: BackendPorts = {
+    transaction: action => action(ports),
     projects: {
       async create(input) { const p = { id: input.id, title: input.title, clientName: null, description: null, createdAt: now(), updatedAt: now() }; projects.set(p.id, p); return p; },
       async list() { return [...projects.values()]; },
@@ -248,6 +254,22 @@ describe('AI routed through the backend engine', () => {
     await expect(garbled.ai.extractScope('Client: five pages', never)).rejects.toMatchObject({ code: 'invalid_output' });
   });
 
+  test('a generation timeout offers timeout feedback without marking a reachable model unavailable', async () => {
+    const { ai, agreement } = await confirmed({
+      isAvailable: async () => true,
+      generate: async () => { throw new LLMGenerationTimeoutError(); },
+    });
+    const unsubscribe = ai.subscribe(() => {});
+    try {
+      await new Promise(resolve => setTimeout(resolve, 0));
+      expect(ai.getStatus()).toBe('ready');
+      const failure = await ai.analyzeRequest(agreement, 'Keep this request', never).catch(error => error);
+      expect(failure).toMatchObject({ code: 'generation_timeout' });
+      expect(errorMessage(failure)).toMatch(/too long|timed out/i);
+      expect(ai.getStatus()).toBe('ready');
+    } finally { unsubscribe(); }
+  });
+
   test('extraction and message drafting return plain values without saving anything', async () => {
     const brief = JSON.stringify({
       title: 'Website', deliverables: [{ title: 'Five pages', description: 'Responsive' }],
@@ -264,7 +286,10 @@ describe('AI routed through the backend engine', () => {
 
     const drafting = await confirmed(engineReturning('{"draft_message":"Hello, here is my proposal."}'));
     const message = await drafting.ai.draftProposalMessage({ agreement: drafting.agreement, requestText: 'x', deliverables: ['Booking'], feeAmount: 7000, currency: 'PHP', extraWorkingDays: 5 }, never);
-    expect(message).toBe('Hello, here is my proposal.');
+    expect(message.startsWith('Hello, here is my proposal.')).toBe(true);
+    expect(message).toContain('- Booking');
+    expect(message).toContain('Estimated additional fee: PHP 7,000');
+    expect(message).toContain('Estimated additional time: 5 working days');
   });
 
   test('Stop rejects at once, and the engine stays busy until its request really ends', async () => {
@@ -282,4 +307,15 @@ describe('AI routed through the backend engine', () => {
     await new Promise(resolve => setTimeout(resolve, 0));
     expect(ai.getStatus()).not.toBe('busy');
   });
+});
+
+test('a mismatched stored request/agreement reports integrity failure', async () => {
+  const { ports, stores } = fakePorts(engineReturning('{}'));
+  const data = createBackendData(async () => ports);
+  const project = await data.createProject('Broken links');
+  const agreement = await data.confirmScope(project.id, manualDraft(project.id));
+  const analysis = await data.saveAnalysis({ projectId: project.id, agreementId: agreement.id, agreementVersion: 1,
+    requestText: 'Add booking', findings: [{ id: 'F1', requestedItem: 'Booking', classification: 'potential_additional', explanation: 'Extra', evidenceRequirementIds: [], clarificationQuestions: [] }] });
+  const request = [...stores.requests.values()][0]; request.agreementId = 'different-agreement';
+  await expect(data.getAnalysis(project.id, analysis.id)).rejects.toMatchObject({ code: 'data_integrity' });
 });
