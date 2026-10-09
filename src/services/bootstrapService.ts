@@ -57,11 +57,11 @@ export async function initializeBackendAsync(): Promise<AppServices> {
   const llmEngine = new LMStudioAdapter({
     getBaseUrl: async () => {
       const saved = await settingsRepo.get('lm_studio_url');
-      return saved || 'http://10.0.2.2:1234/v1';
+      return saved || process.env.EXPO_PUBLIC_LM_STUDIO_URL || 'http://10.0.2.2:1234/v1';
     },
     getModel: async () => {
       const saved = await settingsRepo.get('lm_studio_model');
-      return saved || 'local-model';
+      return saved || process.env.EXPO_PUBLIC_LM_STUDIO_MODEL || 'local-model';
     },
   });
 

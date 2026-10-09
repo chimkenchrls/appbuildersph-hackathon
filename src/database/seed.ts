@@ -19,8 +19,10 @@ export async function seedDemoDataAsync(db: SQLiteDatabase): Promise<boolean> {
   const settingsRepo = new SettingsRepository(db);
 
   // Set default LM Studio URL in settings if not configured
-  await settingsRepo.set('lm_studio_url', 'http://10.0.2.2:1234/v1');
-  await settingsRepo.set('lm_studio_model', 'local-model');
+  const defaultUrl = process.env.EXPO_PUBLIC_LM_STUDIO_URL || 'http://10.0.2.2:1234/v1';
+  const defaultModel = process.env.EXPO_PUBLIC_LM_STUDIO_MODEL || 'local-model';
+  await settingsRepo.set('lm_studio_url', defaultUrl);
+  await settingsRepo.set('lm_studio_model', defaultModel);
 
   const projectId = 'proj_demo_website_01';
   const agreementId = 'agmt_demo_v1_01';
