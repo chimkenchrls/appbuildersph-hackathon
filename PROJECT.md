@@ -55,12 +55,14 @@ The supplied brief proposes an iPhone 15 Pro Max and Qwen 3.5 9B. Both are inten
 | Kasunduan Vault | Preserve confirmed scope records | Save an immutable Agreement v1 with stable requirement IDs. |
 | ScopeGuard | Review new requests against the confirmed agreement | Produce suggested classifications, explanations, scope references, and clarification questions. |
 | ChangeDesk | Turn reviewed changes into a proposal | Draft an editable message using freelancer-entered estimates; save and copy it. |
+| Legal Contract Generator | Generate formal, legally compliant contracts | Produces print-ready agreements compliant with Philippine commercial law, EOPT RA 11976, BIR Form 2307, RA 8293, and RA 10173. |
+| Sharing & Export Service | Offline dispatch and portable backup | Native OS share sheet via `Share.share()` and complete offline JSON backup/restore. |
 
 ### BriefCraft
 
 Input is deliberately pasted text or manually entered requirements. The application does not automatically access messaging accounts.
 
-The draft may contain a project title, deliverables, exclusions, proposed budget, timeline, revision terms, and missing information. The freelancer reviews and corrects these fields before confirmation. Unspecified details remain unspecified.
+The draft may contain a project title, deliverables, exclusions, proposed budget, timeline, revision terms, missing information, and BIR tax treatment. The freelancer reviews and corrects these fields before confirmation. Unspecified details remain unspecified.
 
 ### Kasunduan Vault
 
@@ -87,6 +89,19 @@ Evidence consists of references to actual stored requirements. An absence from t
 The freelancer reviews the analysis, chooses the additional deliverables, and optionally enters a proposed fee and additional working days. Local AI helps draft a professional explanation using those inputs.
 
 The user can edit, save, and copy the proposal. Its MVP status is **draft**. Sending, client acceptance, and automatic scope updates are outside the required workflow.
+
+### Legal Contract Generator
+
+Generates a print-ready, legally enforceable service agreement directly from confirmed Kasunduan Vault data:
+- Republic Act No. 11976 (Ease of Paying Taxes / EOPT Act): requiring official commercial or BIR invoices on milestone delivery.
+- Bureau of Internal Revenue (BIR) Form 2307: explicit tax treatment clauses governing expanded withholding tax deductions.
+- Republic Act No. 8293 (Intellectual Property Code of the Philippines): retaining copyright and source code ownership until fees are fully settled.
+- Republic Act No. 10173 (Data Privacy Act of 2012): safeguarding proprietary project assets and personal communications.
+- Mutual signature lines for formal execution.
+
+### Native Sharing & Export Service
+
+Dispatches change proposals, scope summaries, and full legal contracts through the mobile operating system's native share sheet (`Share.share()`). Operates 100% offline without remote servers or cloud accounts. In addition, `ExportService` provides portable, offline JSON backup and restoration.
 
 ## 5. Example user journey
 
