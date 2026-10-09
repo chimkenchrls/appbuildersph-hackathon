@@ -23,7 +23,8 @@
       "expo-status-bar",
       "expo-sqlite",
       "llama.rn",
-      "@react-native-vector-icons/lucide"
+      "@react-native-vector-icons/lucide",
+      ["expo-build-properties", { "android": { "usesCleartextTraffic": true } }]
     ],
     "extra": {
       "router": {},

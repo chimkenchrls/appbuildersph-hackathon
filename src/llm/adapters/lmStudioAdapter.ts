@@ -58,6 +58,9 @@ export class LMStudioAdapter implements LLMEngine {
           messages,
           temperature: options.temperature ?? 0.1,
           max_tokens: options.maxTokens ?? 1024,
+          // Reasoning models (such as Qwen3.5) otherwise spend the whole token budget thinking
+          // and return no JSON. LM Studio ignores this field for models without reasoning.
+          reasoning_effort: 'none',
         }),
         signal: controller.signal,
       });

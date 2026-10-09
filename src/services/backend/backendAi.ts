@@ -2,6 +2,7 @@ import { LLMEngineUnavailableError, LLMParseError } from '@/llm/contracts';
 import { parseAndValidateJson } from '@/llm/jsonParser';
 import { buildChangeDeskPrompt } from '@/llm/prompts/changeDeskPrompt';
 import { buildScopeGuardPrompt } from '@/llm/prompts/scopeGuardPrompt';
+import { composeProposalMessage } from '@/safety/proposalMessage';
 import type { SaklawAi } from '@/services/contracts';
 import { checkCancelled, ServiceError } from '@/services/errors';
 import { ChangeDeskRawOutputSchema, ScopeGuardRawOutputSchema } from '@/types/schemas';
@@ -109,12 +110,15 @@ export function createBackendAi(getPorts: () => Promise<BackendPorts>): SaklawAi
         const messages = buildChangeDeskPrompt({
           agreementTitle: stored?.title ?? `Agreement v${input.agreement.version}`,
           selectedItems: input.deliverables,
-          feeEstimate: input.feeAmount,
-          daysEstimate: input.extraWorkingDays,
-          currency: input.currency,
         });
         const raw = await ports.engine.generate(messages, { temperature: 0.4, maxTokens: 1000 });
-        return parseAndValidateJson(raw, ChangeDeskRawOutputSchema).draft_message;
+        const narrative = parseAndValidateJson(raw, ChangeDeskRawOutputSchema).draft_message;
+        return composeProposalMessage(narrative, {
+          deliverables: input.deliverables,
+          feeAmount: input.feeAmount,
+          currency: input.currency,
+          extraWorkingDays: input.extraWorkingDays,
+        });
       }),
   };
 }
