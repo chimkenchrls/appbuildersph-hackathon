@@ -12,7 +12,7 @@ import { StatusBadge } from '@/components/ui/StatusBadge';
 import { colors } from '@/constants/theme';
 
 const DESCRIPTION =
-  'Saklaw is an Android app, in development, that helps freelancers turn client conversations into a confirmed scope, compare new requests with it, and prepare change proposals.';
+  'OwlSet is an Android app, in development, that helps freelancers turn client conversations into a confirmed scope, compare new requests with it, and prepare change proposals.';
 
 const SECTIONS = [
   { id: 'why', label: 'Why' },
@@ -167,11 +167,11 @@ export default function RootScreen() {
   return (
     <div ref={scroller} className="lp" data-scroller>
       <Head>
-        <title>Saklaw: clear agreements for freelancers</title>
+        <title>OwlSet: clear agreements for freelancers</title>
         <meta name="description" content={DESCRIPTION} />
         <meta name="theme-color" content={colors.background} />
         <meta property="og:type" content="website" />
-        <meta property="og:title" content="Saklaw: clear agreements for freelancers" />
+        <meta property="og:title" content="OwlSet: clear agreements for freelancers" />
         <meta property="og:description" content={DESCRIPTION} />
         <link rel="icon" type="image/png" href="/favicon.png" />
         <link rel="apple-touch-icon" href="/favicon.png" />
@@ -184,8 +184,8 @@ export default function RootScreen() {
 
       <header ref={header} className="lp-bar">
         <div className="lp-wrap lp-bar-row">
-          <a href="#top" className="lp-brand" aria-label="Saklaw, back to top" onClick={(event) => goTo(event, 'top')}>
-            Saklaw
+          <a href="#top" className="lp-brand" aria-label="OwlSet, back to top" onClick={(event) => goTo(event, 'top')}>
+            OwlSet
           </a>
           <nav ref={nav} className="lp-nav" aria-label="Sections">
             {links()}
@@ -212,7 +212,7 @@ export default function RootScreen() {
               ))}
             </h1>
             <p className="lp-lead lp-rise" style={{ '--i': 3 } as CSSProperties}>
-              Saklaw turns client conversations into a confirmed scope, checks new requests against it, and helps you
+              OwlSet turns client conversations into a confirmed scope, checks new requests against it, and helps you
               write change proposals.
             </p>
             <div className="lp-actions lp-rise" style={{ '--i': 4 } as CSSProperties}>
@@ -257,7 +257,7 @@ export default function RootScreen() {
                 Deliverables, deadlines, prices and revision terms end up scattered across messages. When the client
                 asks for more, you rebuild the agreement from memory.
               </p>
-              <p className="lp-body">Saklaw keeps it in one place, so every new request is read against what was recorded.</p>
+              <p className="lp-body">OwlSet keeps it in one place, so every new request is read against what was recorded.</p>
             </div>
             <FileTheChat />
           </div>
@@ -316,7 +316,7 @@ export default function RootScreen() {
               <div className="lp-st" style={{ '--i': 1 } as CSSProperties}>
                 <h3 className="lp-h3">Your numbers.</h3>
                 <p className="lp-body">
-                  Saklaw does not suggest prices or deadlines. Fees and extra days are whatever you type.
+                  OwlSet does not suggest prices or deadlines. Fees and extra days are whatever you type.
                 </p>
               </div>
             </div>
@@ -329,7 +329,7 @@ export default function RootScreen() {
             <KwagiSays size={narrow ? 150 : 220} />
             <div className="lp-about-note">
               <h3 className="lp-h3">Android app</h3>
-              <p className="lp-body">Saklaw is in development. A download will be listed here when a release is available.</p>
+              <p className="lp-body">OwlSet is in development. A download will be listed here when a release is available.</p>
             </div>
           </div>
         </section>
@@ -338,7 +338,7 @@ export default function RootScreen() {
       <footer className="lp-footer">
         <div className="lp-wrap lp-footer-row">
           <a href="#top" className="lp-brand lp-brand-sm" onClick={(event) => goTo(event, 'top')}>
-            Saklaw
+            OwlSet
           </a>
           <nav className="lp-footer-links" aria-label="Footer">
             {links(3)}

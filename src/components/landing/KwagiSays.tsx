@@ -4,7 +4,7 @@ import { Kwagi } from '@/components/kwagi/Kwagi';
 
 // Kwagi introduces himself, one line per click. The facts come from ABOUT_KWAGI.md.
 const LINES: { text: string; shown?: ReactNode }[] = [
-  { text: 'Hoo, me? I’m Kwagi, Saklaw’s owl. I keep watch over what you and your client agreed.' },
+  { text: 'Hoo, me? I’m Kwagi, OwlSet’s owl. I keep watch over what you and your client agreed.' },
   { text: 'Yes, I’m a night owl. So are you, when your client’s morning starts at your bedtime.' },
   {
     text: 'These big eyes aren’t just for looks. They’re for deliverables, deadlines, and the “one small thing” that quietly grows into a week of work.',

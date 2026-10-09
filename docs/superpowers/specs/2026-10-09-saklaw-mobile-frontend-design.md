@@ -1,4 +1,4 @@
-# Saklaw mobile front-end — design spec
+# OwlSet mobile front-end — design spec
 
 - **Date:** 2026-10-09
 - **Owner:** front-end workflow (pandesal-branch)
@@ -11,7 +11,7 @@
 
 ## 1. Goal and scope
 
-Build a shared React Native UI for Android and iOS for Saklaw's one MVP flow:
+Build a shared React Native UI for Android and iOS for OwlSet's one MVP flow:
 
 **Create project → Paste conversation → Extract and review scope → Confirm Agreement v1 →
 Analyze a new request → Review evidence → Edit, save, and copy a change proposal.**

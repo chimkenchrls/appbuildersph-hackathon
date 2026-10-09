@@ -5,7 +5,7 @@ import { AgreementConcept, DraftConcept, ProposalConcept, ScopeGuardConcept } fr
 const STEPS: { title: string; body: string; concept: ReactNode }[] = [
   {
     title: 'Paste the conversation',
-    body: 'Paste the client messages you choose. Saklaw drafts the deliverables, budget, timeline and revision terms, and lists what was never settled. Every field stays editable.',
+    body: 'Paste the client messages you choose. OwlSet drafts the deliverables, budget, timeline and revision terms, and lists what was never settled. Every field stays editable.',
     concept: <DraftConcept />,
   },
   {
@@ -20,7 +20,7 @@ const STEPS: { title: string; body: string; concept: ReactNode }[] = [
   },
   {
     title: 'Draft the change proposal',
-    body: 'Choose what to propose and enter your own fee and extra days. Saklaw helps word the message. You edit, save and copy it. Nothing is sent for you.',
+    body: 'Choose what to propose and enter your own fee and extra days. OwlSet helps word the message. You edit, save and copy it. Nothing is sent for you.',
     concept: <ProposalConcept />,
   },
 ];

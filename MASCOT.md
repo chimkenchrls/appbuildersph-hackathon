@@ -5,7 +5,7 @@
 
 ## 1. Who Kwagi is
 
-Kwagi is a kwago (owl) who represents Saklaw. His name joins *kwago* with *wagi* ("win").
+Kwagi is a kwago (owl) who represents OwlSet. His name joins *kwago* with *wagi* ("win").
 
 He is a **calm, watchful ally**: quiet, observant, reassuring. He notices things and points them out. He does not judge the client, pressure the freelancer, or announce conclusions.
 

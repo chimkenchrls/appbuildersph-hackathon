@@ -1,4 +1,4 @@
-# Saklaw backend architecture design specification
+# OwlSet backend architecture design specification
 
 **Date:** 2026-10-09  
 **Status:** Approved  
@@ -8,7 +8,7 @@
 
 ## 1. Context and goals
 
-Saklaw is a mobile-first, local-AI workspace that helps freelancers turn messy client messages into confirmed project agreements, evaluate new requests against those agreements, and draft change proposals.
+OwlSet is a mobile-first, local-AI workspace that helps freelancers turn messy client messages into confirmed project agreements, evaluate new requests against those agreements, and draft change proposals.
 
 ### Key decisions agreed
 1. **Primary runtime:** The backend subsystem (database migrations, repositories, business logic, prompt builders, schema validation, and inference adapters) runs directly in TypeScript inside the React Native Expo app under `src/`.

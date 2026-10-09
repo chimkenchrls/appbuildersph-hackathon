@@ -2,7 +2,7 @@
 
 ## Purpose and sources of truth
 
-Diligent Dev is a mobile-first React Native application built with Expo and
+OwlSet is a mobile-first React Native application built with Expo and
 TypeScript. Android is the primary implementation, testing, and deployment target;
 the release deliverable is an installable APK. Preserve iOS compatibility and the
 existing web starter where practical, but neither is a gate for the Android release.

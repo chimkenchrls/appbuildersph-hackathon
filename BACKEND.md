@@ -1,12 +1,12 @@
-# Saklaw: Backend Specification and Architecture
+# OwlSet: Backend Specification and Architecture
 
-> **Audience:** Developers and AI coding assistants working on the Saklaw mobile application.
+> **Audience:** Developers and AI coding assistants working on the OwlSet mobile application.
 > **Status:** Implemented and verified in TypeScript on Expo SQLite (WAL mode) with local LM Studio inference integration.
 > **Related documents:** [Project overview](./PROJECT.md) · [Development roadmap](./ROADMAP.md)
 
 ## 1. Backend scope
 
-For Saklaw, "backend" means the application services, local SQLite persistence, validation, and on-device AI integration inside the mobile application.
+For OwlSet, "backend" means the application services, local SQLite persistence, validation, and on-device AI integration inside the mobile application.
 
 Implemented capabilities:
 

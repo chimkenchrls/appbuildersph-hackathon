@@ -88,7 +88,7 @@ export function HomeScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         <View style={styles.header}>
           <Text accessibilityRole="header" style={styles.title}>
-            Saklaw
+            OwlSet
           </Text>
           <Text style={styles.tagline}>
             Clear agreements. Controlled revisions. Confident freelancing.

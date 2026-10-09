@@ -1,12 +1,14 @@
-# Saklaw — Project Overview
+# OwlSet — Project Overview
 
-> **Purpose:** Give developers and AI coding assistants the product context needed to implement Saklaw's 16-hour, four-member MVP.
+> **Purpose:** Give developers and AI coding assistants the product context needed to implement OwlSet's 16-hour, four-member MVP.
 > **Status:** Planning document. Implementation, model compatibility, and device readiness have not been verified.
 > **Companion document:** [ROADMAP.md](./ROADMAP.md) contains implementation tasks, ownership, dependencies, checkpoints, and acceptance checks.
 
 ## 1. Product summary
 
-**Saklaw is a local-AI-assisted mobile workspace that helps freelancers turn client conversations into confirmed project scopes, compare new requests with those scopes, and prepare change proposals.**
+**OwlSet is a local-AI-assisted mobile workspace that helps freelancers turn client conversations into confirmed project scopes, compare new requests with those scopes, and prepare change proposals.**
+
+The final product name is **OwlSet**. Kwagi remains the owl mascot. Existing database names, storage keys, environment variables, Expo slug/scheme, and internal TypeScript contracts retain their legacy identifiers for compatibility.
 
 Tagline: **Clear agreements. Controlled revisions. Confident freelancing.**
 
@@ -20,7 +22,7 @@ The freelancer selects the messages to import, reviews AI suggestions, and decid
 
 Freelancers often receive requirements through messaging apps or email. Deliverables, deadlines, prices, and revision expectations become scattered across conversations. When a client requests more work, the freelancer must reconstruct the original agreement and explain the proposed change.
 
-Saklaw organizes that information into persistent project records and helps answer:
+OwlSet organizes that information into persistent project records and helps answer:
 
 - What deliverables and terms were recorded?
 - Does this new request appear covered by the confirmed scope?

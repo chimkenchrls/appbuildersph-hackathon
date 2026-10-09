@@ -1,12 +1,12 @@
-# Saklaw — Frontend Development Guidelines for Claude
+# OwlSet — Frontend Development Guidelines for Claude
 
 ## 1. Purpose and agreed decisions
 
-Use this document when implementing or reviewing Saklaw's frontend. It records
+Use this document when implementing or reviewing OwlSet's frontend. It records
 the product and design decisions agreed with the project owner. It describes
 required behavior, not features already implemented.
 
-Saklaw helps freelance developers and UI/UX designers turn client conversations
+OwlSet helps freelance developers and UI/UX designers turn client conversations
 into reviewed project scopes, assess new requests against those scopes, and
 prepare change proposals. The freelancer controls commitments; AI assists.
 
@@ -29,7 +29,7 @@ an API or changing configuration. Follow an existing `ROADMAP.md` when present;
 
 The owner's Android-first and landing-page-only decisions supersede the
 provisional iPhone demo choice in `PROJECT.md`. Adapt the generic architecture's
-library/chat examples to Saklaw; they are not additional required screens.
+library/chat examples to OwlSet; they are not additional required screens.
 Preserve its engineering and offline boundaries. If another conflict affects
 implementation, identify it and resolve it before dependent work.
 
@@ -315,7 +315,7 @@ actual compatible dependencies; do not assume they are already installed.
 
 ## 9. Web landing page
 
-The landing page introduces Saklaw and helps visitors obtain the Android app.
+The landing page introduces OwlSet and helps visitors obtain the Android app.
 Reuse brand tokens and product language while giving web its own appropriate
 layout. It does not initialize SQLite, model setup, or the mobile workspace.
 

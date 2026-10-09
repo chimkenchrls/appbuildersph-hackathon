@@ -5,7 +5,7 @@ import { MissingRecord } from '@/components/ui/StateViews';
 /** Rendered by routes whose parameters are not valid identifiers. */
 export default function MissingRecordScreen() {
   return (
-    <Screen title="Saklaw">
+    <Screen title="OwlSet">
       <MissingRecord message="This link does not match a saved record." actionLabel="Back to projects" onAction={() => router.replace('/')} />
     </Screen>
   );

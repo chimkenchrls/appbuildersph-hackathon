@@ -1,20 +1,20 @@
 # About Kwagi
 
-This document contains ready-to-use copy for an About Kwagi section on Saklaw's website or in the app. See [MASCOT.md](./MASCOT.md) for artwork, personality, and motion guidance.
+This document contains ready-to-use copy for an About Kwagi section on OwlSet's website or in the app. See [MASCOT.md](./MASCOT.md) for artwork, personality, and motion guidance.
 
 ## Main section copy
 
 ### Meet Kwagi
 
-Kwagi is Saklaw's owl mascot, inspired by freelancers who work with clients around the world. When a client's workday begins as yours winds down, conversations and project updates can arrive well into the evening. The familiar “night owl” reflects that experience of working across time zones.
+Kwagi is OwlSet's owl mascot, inspired by freelancers who work with clients around the world. When a client's workday begins as yours winds down, conversations and project updates can arrive well into the evening. The familiar “night owl” reflects that experience of working across time zones.
 
-But there is more to Kwagi than late nights. His watchful eyes represent the care it takes to keep track of what was agreed: the deliverables, the deadlines, and the small requests that can grow into extra work. He brings a calm, friendly presence to Saklaw's purpose of helping freelancers review those details and communicate with confidence.
+But there is more to Kwagi than late nights. His watchful eyes represent the care it takes to keep track of what was agreed: the deliverables, the deadlines, and the small requests that can grow into extra work. He brings a calm, friendly presence to OwlSet's purpose of helping freelancers review those details and communicate with confidence.
 
 His name combines *kwago*, the Filipino word for owl, with *wagi*, meaning “win.” For Kwagi, a win means a clear agreement, work that is valued, and a client relationship built on shared expectations. He represents the freelancer working across borders while staying grounded in their own boundaries. Even a night owl deserves time to rest.
 
 ## Short version
 
-Kwagi is Saklaw's watchful owl, inspired by freelancers working with clients across time zones. His name combines *kwago* (“owl”) and *wagi* (“win”), reflecting a simple goal: clearer agreements, valued work, and confidence in setting boundaries.
+Kwagi is OwlSet's watchful owl, inspired by freelancers working with clients across time zones. His name combines *kwago* (“owl”) and *wagi* (“win”), reflecting a simple goal: clearer agreements, valued work, and confidence in setting boundaries.
 
 ## Implementation notes
 
