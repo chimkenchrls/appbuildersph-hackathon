@@ -2,9 +2,23 @@
   "expo": {
     "name": "Diligent Dev",
     "slug": "diligent-dev",
+    "scheme": "diligent-dev",
     "version": "1.0.0",
     "userInterfaceStyle": "light",
-    "ios": { "supportsTablet": true },
-    "web": { "bundler": "metro", "output": "single" }
+    "experiments": {
+      "typedRoutes": true
+    },
+    "ios": {
+      "supportsTablet": true
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-status-bar",
+      "expo-sqlite"
+    ]
   }
 }

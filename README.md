@@ -1,20 +1,22 @@
 # Diligent Dev
 
-A minimal Expo + React Native + TypeScript starter sharing one codebase across
-web, Android, and iOS. No project idea or backend is assumed yet.
+A minimal Expo + React Native + TypeScript starter with Android APK delivery as
+the priority. iOS compatibility and the existing web target are secondary.
+`ARCHITECTURE.md` defines the intended offline local-data and on-device inference
+architecture; those capabilities are not implemented in the starter yet.
 
 ## Start
 
 Use Node.js 22.13 or newer and npm. From this folder:
 
 ```sh
-npm install
+npm ci
 npm run check:dependencies
-npm run web
+npm start
 ```
 
-The first install creates `package-lock.json`; commit it to pin the team's dependencies.
-Use `npm ci` for subsequent installs once that lockfile is committed.
+The committed `package-lock.json` pins the team's dependencies. Use `npm ci`
+after pulling changes. Use `npm run web` for the companion web preview.
 
 For a physical phone, install Expo Go, then run `npm start` and scan the QR code.
 The phone and computer should be on the same network. Expo Go previews the project;
@@ -45,7 +47,7 @@ npm run build:web
 
 The web export is written to `dist/` and can be hosted as a static website.
 
-## Installable Android and iPhone apps
+## Android APK builds and distribution
 
 Native build profiles are included; no native builds have been created yet.
 When you are ready, log in to an Expo account and configure the project:
@@ -54,15 +56,31 @@ When you are ready, log in to an Expo account and configure the project:
 npx eas-cli@latest login
 npx eas-cli@latest build:configure
 npx eas-cli@latest build --platform android --profile preview
-npx eas-cli@latest build --platform ios --profile preview
+npx eas-cli@latest build --platform android --profile apk
 ```
 
-Choose unique Android package and iOS bundle identifiers during configuration.
-Android internal distribution produces an installable APK. Physical iPhone
-internal distribution requires Apple signing credentials and registered devices.
-EAS cloud builds can be started from Linux; local iOS builds require macOS.
-Store releases use the `production` profile and require the corresponding
-developer accounts, signing, and store submission.
+Configure the team's Expo project and a unique Android package identifier before
+building. Preserve the existing profiles when running build configuration.
+`preview` produces a test APK; `apk` produces a standalone release candidate and
+inherits production version incrementing. Both explicitly set
+`android.buildType: "apk"`. The existing `production` profile remains available
+for future Google Play AAB builds. See [Expo APK builds](https://docs.expo.dev/build-reference/apk/).
+
+Share the EAS build artifact link and record its app version and source commit.
+Download and install the APK on a physical Android device, allowing installation
+from that source when Android prompts. Keep the Android package identifier and
+signing key stable so later APKs can upgrade the installed app. Keep signing
+credentials out of the repository.
+
+The Android release must run without Expo Go or a development server. Once the
+offline features are implemented, verify fresh installation and first launch,
+local model setup, inference, saved data, and relaunch in airplane mode. Test
+upgrading an existing installation without losing data. Follow the device and
+resource acceptance requirements in `ARCHITECTURE.md`.
+
+EAS is used at build time; the release must not depend on cloud services at
+runtime. Deliver offline upgrades as new APKs. iOS builds and store submission
+can be configured when those delivery targets are needed.
 
 ## Setup verification
 
