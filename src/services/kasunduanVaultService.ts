@@ -1,0 +1,51 @@
+import type { AgreementRepository } from '@/database/repositories/agreementRepository';
+import type { ScopeDraft, Agreement } from '@/types/domain';
+
+export class KasunduanVaultService {
+  constructor(private readonly agreementRepo: AgreementRepository) {}
+
+  async confirmScope(
+    projectId: string,
+    draft: ScopeDraft,
+    customTitle?: string,
+  ): Promise<Agreement> {
+    if (!draft.requirements || draft.requirements.length === 0) {
+      throw new Error('Cannot confirm an empty scope. At least one deliverable is required.');
+    }
+
+    const existingAgreements = await this.agreementRepo.listByProjectId(projectId);
+    const nextVersion = existingAgreements.length > 0 ? existingAgreements[0].versionNumber + 1 : 1;
+
+    const id = `agmt_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const now = new Date().toISOString();
+    const title = customTitle?.trim() || `${draft.title} — Agreement v${nextVersion}`;
+
+    const agreement: Agreement = {
+      id,
+      projectId,
+      versionNumber: nextVersion,
+      title,
+      requirements: draft.requirements,
+      budgetAmount: draft.budgetAmount,
+      budgetCurrency: draft.budgetCurrency,
+      budgetNotes: draft.budgetNotes,
+      durationDays: draft.durationDays,
+      deadline: draft.deadline,
+      timelineNotes: draft.timelineNotes,
+      revisionTerms: draft.revisionTerms,
+      exclusions: draft.exclusions,
+      missingInformation: draft.missingInformation,
+      confirmedAt: now,
+    };
+
+    return this.agreementRepo.create(agreement);
+  }
+
+  async getLatestAgreement(projectId: string): Promise<Agreement | null> {
+    return this.agreementRepo.getLatestByProjectId(projectId);
+  }
+
+  async listAgreements(projectId: string): Promise<Agreement[]> {
+    return this.agreementRepo.listByProjectId(projectId);
+  }
+}
