@@ -274,13 +274,13 @@ Update this section while implementing. Keep it concise and include concrete evi
 
 | Task / checkpoint | Status | Evidence or result | Blocker / next action |
 | --- | --- | --- | --- |
-| Repository and target inspection | Not started | — | Inspect actual project and device access. |
-| Phase 1 gate | Not started | — | — |
-| Phase 2 gate | Not started | — | — |
-| Phase 3 gate | Not started | — | — |
-| Phase 4 gate | Not started | — | — |
-| Phase 5 gate | Not started | — | — |
-| Phase 6 gate | Not started | — | — |
+| Repository and target inspection | Done | Expo SDK 57, React Native 0.86.3, Expo Router, SQLite. | Ready. |
+| Phase 1: Foundation and persistence | Done | SQLite WAL mode, schema migrations 001 and 002 applied, demo seed operational, LM Studio adapter configured. | Verified in `HomeScreen.tsx`. |
+| Phase 2: Project creation & scope | Done | `ProjectRepository`, `BriefCraftService`, `KasunduanVaultService`, and `AgreementRepository` implemented and validated with Zod. | Ready for UI screen composition. |
+| Phase 3: ScopeGuard request analysis | Done | `ScopeGuardService`, `ScopeGuardRepository`, and Zod validation verifying evidence requirement citations against confirmed scope. | Ready for UI screen composition. |
+| Phase 4: ChangeDesk, Legal Contracts & Sharing | Done | `ChangeDeskService`, `ContractGeneratorService` (EOPT RA 11976, BIR 2307, RA 8293, RA 10173), and `ShareService` (`Share.share()`) verified. | UI screens in Phase 3/4. |
+| Phase 5: Testing and stabilization | In progress | `npx expo lint`, `npx tsc --noEmit`, `npx expo-doctor`, and `npm run build:web` pass cleanly with 0 errors. | Physical Android build testing. |
+| Phase 6: Final APK build | Pending | EAS `preview` and `apk` profiles configured with standalone APK delivery. | EAS cloud build execution. |
 
 ### Decisions to record
 

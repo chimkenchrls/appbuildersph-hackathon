@@ -1,57 +1,52 @@
-# Saklaw — Backend Specification
+# Saklaw: Backend Specification and Architecture
 
-> **Audience:** Developers and AI coding assistants implementing the 16-hour, four-member MVP.
-> **Status:** Proposed implementation specification; no application backend has been implemented or tested by creating this document.
-> **Related documents:** [Project overview](./PROJECT_OVERVIEW.md) · [Development roadmap](./ROADMAP.md)
-> **Naming:** Saklaw remains the name used in the existing documents. ScopeWise is a proposed English name; a rename has not been confirmed.
+> **Audience:** Developers and AI coding assistants working on the Saklaw mobile application.
+> **Status:** Implemented and verified in TypeScript on Expo SQLite (WAL mode) with local LM Studio inference integration.
+> **Related documents:** [Project overview](./PROJECT.md) · [Development roadmap](./ROADMAP.md)
 
 ## 1. Backend scope
 
-For this MVP, “backend” means the application services, local persistence, validation, and on-device AI integration inside the mobile application.
+For Saklaw, "backend" means the application services, local SQLite persistence, validation, and on-device AI integration inside the mobile application.
 
-Build these capabilities:
+Implemented capabilities:
 
-- Create and retrieve projects.
-- Extract and save editable scope drafts.
-- Confirm an immutable Agreement v1.
-- Store new requests and analyze them against the exact selected agreement.
-- Validate findings and resolve evidence to stored scope requirements.
-- Generate and save editable change proposal drafts.
-- Retrieve project history after restarting the application offline.
+- Create and retrieve projects (`ProjectRepository`).
+- Extract and save editable scope drafts from chat (`BriefCraftService`).
+- Confirm immutable, versioned agreements (`KasunduanVaultService`, `AgreementRepository`).
+- Store new requests and analyze them against confirmed agreements (`ScopeGuardService`, `ScopeGuardRepository`).
+- Validate findings and resolve evidence to stored scope requirements (`ScopeGuardService`).
+- Generate and save editable change proposal drafts (`ChangeDeskService`, `ProposalRepository`).
+- Automatically generate formal, legally compliant contracts under Philippine law with EOPT Act RA 11976, BIR Form 2307, RA 8293, and RA 10173 (`ContractGeneratorService`).
+- Share change proposals, agreements, and contracts via the native mobile OS share sheet (`ShareService`).
+- Backup and restore full project data offline (`ExportService`).
+- Retrieve project history and state after restarting the application offline (`BootstrapService`).
 
-No hosted server, HTTP API, account system, remote inference endpoint, or cloud synchronization is required. Service methods below are internal TypeScript interfaces, not REST routes.
+No hosted remote server, HTTP API, account system, or cloud synchronization is required. Service methods are internal TypeScript classes and repositories, not remote REST routes.
 
 ## 2. Architecture and ownership
 
 ```text
-Screens
-  → Application services
-      → Input/output schemas and business rules
-      → Repositories → SQLite
-      → AI adapter → Local native inference runtime → Installed model
+Screens / Routes
+  → Application services (BriefCraft, KasunduanVault, ScopeGuard, ChangeDesk, ContractGenerator, Share, Export)
+      → Input/output schemas and business rules (Zod)
+      → Repositories → SQLite (expo-sqlite WAL mode)
+      → AI adapter (LMStudioAdapter) → Local inference runtime (LM Studio / llama.rn)
 ```
 
-| Component | Responsibility | Owner |
-| --- | --- | --- |
-| AI adapter | Model readiness, inference, structured output, cancellation | Member 1 |
-| Domain services and repositories | Database, relationships, confirmation, persistence | Member 2 |
-| Service consumers | Forms, review actions, loading/error presentation | Member 3 |
-| Integration and verification | Connect services to screens, exercise full flow, verify device build | Member 4 |
-
-Reuse repository conventions. A suggested layout, if no equivalent structure exists:
+The implemented layout in `src/`:
 
 ```text
 src/
-  backend/
-    db/                 # Connection and versioned migrations
-    repositories/       # Parameterized SQLite queries and row mapping
-    services/           # Projects, scopes, requests, proposals, history
-    ai/                 # Runtime adapter and prompts
-    schemas/            # Input and output validation
-    types/              # Domain contracts and typed errors
+  database/
+    client.ts           # SQLite connection and WAL/foreign-key pragmas
+    migrate.ts          # Versioned migration runner
+    seed.ts             # Idempotent demo project seeder
+    migrations/         # 001_initial.ts, 002_add_tax_treatment.ts
+    repositories/       # Parameterized queries (Project, Agreement, ScopeGuard, Proposal, Settings)
+  services/             # Domain orchestration services
+  llm/                  # Contracts, LMStudioAdapter, JSON parser, prompt builders
+  types/                # Domain types and Zod validation schemas
 ```
-
-The intended stack is TypeScript, Expo SQLite, Zod, and a compatible local inference runtime. Native runtime/model compatibility remains a Phase 1 feasibility requirement.
 
 ## 3. Domain conventions
 
@@ -251,6 +246,12 @@ The following contracts refine the roadmap's conceptual interfaces. Splitting re
 | `saveProposal` | Draft values and operation ID, or existing proposal ID for edits | Persisted proposal with status `draft`. |
 | `getProjectHistory` | Project ID | Agreements, requests, successful analyses, and proposals, ordered deterministically. |
 | `getModelStatus` | None | Readiness state and a non-sensitive diagnostic. |
+| `generateContractText` | Agreement, optional contract options (names, TINs, addresses, tax treatment) | Formal freelance service agreement formatted under Philippine commercial law. |
+| `shareProposal` | Change proposal, project title | Opens native OS share sheet with formatted change proposal message. |
+| `shareAgreement` | Agreement, project title | Opens native OS share sheet with confirmed deliverables and terms. |
+| `shareContract` | Agreement, optional contract options | Opens native OS share sheet with full legal contract text. |
+| `exportProject` | Project ID | Complete, portable JSON backup of project, agreements, requests, analyses, and proposals. |
+| `importProject` | Export payload JSON | Validated offline restoration into SQLite. |
 
 Derive project and agreement IDs from stored relationships where possible. Do not trust independently supplied IDs when they can disagree.
 
