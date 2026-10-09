@@ -5,7 +5,7 @@ import { ScopeGuardRawOutputSchema } from '@/types/schemas';
 import type { AgreementRepository } from '@/database/repositories/agreementRepository';
 import type { ScopeGuardRepository } from '@/database/repositories/scopeGuardRepository';
 import { validateScopeGuardFindings } from '@/safety/scopeGuardValidation';
-import type { ScopeGuardAnalysis } from '@/types/domain';
+import type { ScopeGuardAnalysis, ClientRequest } from '@/types/domain';
 
 export class ScopeGuardService {
   constructor(
@@ -59,7 +59,7 @@ export class ScopeGuardService {
       createdAt: now,
     };
 
-    return this.scopeGuardRepo.createRequestWithAnalysis({ id: requestId, projectId, agreementId, rawText: trimmed, createdAt: now }, analysis);
+    return this.scopeGuardRepo.createRequestWithAnalysis({ id: requestId, projectId, agreementId, rawText: trimmed, createdAt: now, status: 'stored' }, analysis);
   }
 
   async getAnalysisByRequestId(requestId: string): Promise<ScopeGuardAnalysis | null> {
@@ -68,5 +68,13 @@ export class ScopeGuardService {
 
   async listAnalyses(projectId: string): Promise<ScopeGuardAnalysis[]> {
     return this.scopeGuardRepo.listAnalysesByProjectId(projectId);
+  }
+
+  async listRequests(projectId: string): Promise<ClientRequest[]> {
+    return this.scopeGuardRepo.listRequestsByProjectId(projectId);
+  }
+
+  async deleteRequest(requestId: string): Promise<void> {
+    return this.scopeGuardRepo.deleteRequest(requestId);
   }
 }

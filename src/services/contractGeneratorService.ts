@@ -174,6 +174,7 @@ Date: _________________________________________
   /**
    * Generates a beautifully styled, print-ready HTML document suitable
    * for converting into a professional PDF via expo-print.
+   * Engineered strictly to fit on a single page (Letter / A4) with zero overflow.
    */
   static generateContractHtml(agreement: Agreement, options: ContractOptions = {}): string {
     const {
@@ -188,7 +189,7 @@ Date: _________________________________________
     } = options;
 
     const escape = (text: string) =>
-      text
+      String(text || '')
         .replace(/&/g, '&amp;')
         .replace(/</g, '&lt;')
         .replace(/>/g, '&gt;')
@@ -203,7 +204,7 @@ Date: _________________________________________
 
     const feeText =
       agreement.budgetAmount != null
-        ? `${escape(agreement.budgetCurrency)} ${agreement.budgetAmount.toLocaleString()}`
+        ? `${escape(agreement.budgetCurrency || 'PHP')} ${agreement.budgetAmount.toLocaleString()}`
         : 'To be determined';
 
     const timelineText =
@@ -217,360 +218,494 @@ Date: _________________________________________
     switch (taxTreatment) {
       case 'net_of_withholding':
         taxDescription =
-          'Net of Withholding: All quoted fees are net of creditable withholding tax. If withholding applies under BIR regulations, Client shall provide a certified BIR Form 2307 upon payment.';
+          'Quoted fees are net of creditable withholding tax. If withholding applies under BIR rules, Client shall furnish a certified BIR Form 2307 upon payment.';
         break;
       case 'subject_to_2307':
         taxDescription =
-          'Subject to BIR 2307: Expanded withholding tax (5% or 10%) applies with certified BIR Form 2307 issued to Freelancer at payment.';
+          'Subject to expanded withholding tax (5% or 10% per BIR regulations) with certified BIR Form 2307 issued to Freelancer at payment.';
         break;
       case 'inclusive':
         taxDescription =
-          'Tax Inclusive: Compensation is inclusive of all local taxes payable by the Freelancer.';
+          'Compensation is inclusive of all applicable local taxes payable by the Freelancer.';
         break;
       case 'none_specified':
       default:
         taxDescription =
-          'Payable in full without deductions. Each party remains independently responsible for respective tax liabilities.';
+          'Payable in full without deductions. Each party remains independently responsible for their respective tax filings.';
         break;
     }
 
-    const deliverablesHtml = agreement.requirements
-      .map(
-        (r, idx) => `
-        <div class="deliverable-item">
-          <div class="deliverable-header">
-            <span class="deliverable-num">${idx + 1}</span>
-            <span class="deliverable-badge">${escape(r.id)}</span>
-            <span class="deliverable-title">${escape(r.title)}</span>
-          </div>
-          <p class="deliverable-desc">${escape(r.description || 'Deliverable according to project specifications.')}</p>
-        </div>`,
-      )
-      .join('');
+    const deliverablesRowsHtml =
+      agreement.requirements && agreement.requirements.length > 0
+        ? agreement.requirements
+            .map(
+              (r, idx) => `
+              <tr>
+                <td style="width: 22px; text-align: center; color: #64748B; font-weight: 600;">${idx + 1}</td>
+                <td style="width: 70px;"><span class="req-badge">${escape(r.id)}</span></td>
+                <td style="width: 175px; font-weight: 700; color: #0F172A;">${escape(r.title)}</td>
+                <td style="color: #475569; font-size: 8px;">${escape(r.description || 'Deliverable according to project specifications.')}</td>
+              </tr>`,
+            )
+            .join('')
+        : '<tr><td colspan="4" style="text-align: center; color: #64748B; padding: 6px;">Specifications established in confirmed scope baseline.</td></tr>';
 
     const exclusionsHtml =
-      agreement.exclusions.length > 0
+      agreement.exclusions && agreement.exclusions.length > 0
         ? agreement.exclusions
-            .map((e) => `<li class="exclusion-item">${escape(e)}</li>`)
+            .slice(0, 5)
+            .map((e) => `<li>${escape(e)}</li>`)
             .join('')
-        : '<li class="exclusion-item">No exclusions explicitly recorded at signing.</li>';
+        : '<li>None explicitly recorded at signing.</li>';
 
     return `<!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Service Agreement - ${escape(agreement.title)}</title>
+  <title>Contract Form ${escape(clientName || 'Client')}</title>
   <style>
     @page {
-      margin: 18mm 16mm;
-      size: letter;
+      size: letter portrait;
+      margin: 8mm 11mm;
     }
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-      color: #1A1A1A;
-      line-height: 1.5;
-      font-size: 13px;
+    *, *::before, *::after {
+      box-sizing: border-box;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+    }
+    html, body {
       margin: 0;
       padding: 0;
+      width: 100%;
+      height: 100%;
+      max-height: 100%;
+      overflow: hidden !important;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #0F172A;
       background: #FFFFFF;
+      font-size: 9.2pt;
+      line-height: 1.35;
     }
-    .container {
-      max-width: 800px;
-      margin: 0 auto;
+    .document-page {
+      width: 100%;
+      height: 100%;
+      max-height: 100%;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      page-break-inside: avoid !important;
+      page-break-after: avoid !important;
+      page-break-before: avoid !important;
+      overflow: hidden !important;
     }
+
+    /* 1. Header */
     .header-bar {
-      border-bottom: 2px solid #1A1A1A;
-      padding-bottom: 14px;
-      margin-bottom: 20px;
+      border-bottom: 2px solid #0F172A;
+      padding-bottom: 7px;
       display: flex;
       justify-content: space-between;
       align-items: flex-end;
     }
     .doc-eyebrow {
-      font-size: 10px;
+      font-size: 8pt;
       font-weight: 700;
-      letter-spacing: 1.5px;
+      letter-spacing: 1.2px;
       text-transform: uppercase;
-      color: #6B7280;
-      margin-bottom: 4px;
+      color: #4D8B8B;
+      margin-bottom: 3px;
     }
     .doc-title {
-      font-size: 22px;
+      font-size: 16.5pt;
       font-weight: 800;
-      color: #1A1A1A;
+      color: #0F172A;
       margin: 0;
-      letter-spacing: -0.5px;
+      letter-spacing: -0.3px;
+      line-height: 1.15;
+    }
+    .project-name {
+      font-size: 10.5pt;
+      font-weight: 600;
+      color: #334155;
+      margin-top: 2px;
     }
     .header-meta {
       text-align: right;
-      font-size: 11px;
-      color: #4B5563;
+      font-size: 8.5pt;
+      color: #475569;
+      line-height: 1.35;
     }
     .version-tag {
       display: inline-block;
-      background: #E5E7EB;
-      color: #1A1A1A;
+      background: #E8F2F2;
+      color: #2D6A6A;
+      border: 1px solid #B4D5D5;
       font-weight: 700;
-      font-size: 10px;
+      font-size: 8pt;
       padding: 2px 8px;
       border-radius: 4px;
-      margin-top: 4px;
+      margin-top: 3px;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
     }
+
+    /* 2. Parties Grid */
     .parties-grid {
       display: flex;
-      gap: 16px;
-      margin-bottom: 22px;
+      gap: 12px;
     }
     .party-card {
       flex: 1;
-      border: 1px solid #E5E7EB;
-      border-radius: 8px;
-      padding: 12px 14px;
-      background: #F9FAFB;
+      border: 1px solid #E2E8F0;
+      border-radius: 6px;
+      padding: 8px 12px;
+      background: #F8FAFC;
     }
     .party-role {
-      font-size: 10px;
+      font-size: 7.5pt;
       font-weight: 700;
-      color: #6B7280;
+      color: #64748B;
       text-transform: uppercase;
-      letter-spacing: 1px;
-      margin-bottom: 4px;
+      letter-spacing: 0.8px;
+      margin-bottom: 2px;
     }
     .party-name {
-      font-size: 14px;
+      font-size: 11pt;
       font-weight: 700;
-      color: #111827;
-      margin-bottom: 4px;
+      color: #0F172A;
+      margin-bottom: 2px;
     }
     .party-detail {
-      font-size: 11px;
-      color: #4B5563;
-      margin: 2px 0;
+      font-size: 8.5pt;
+      color: #475569;
+      line-height: 1.25;
+    }
+
+    /* Section Structure */
+    .section-block {
+      display: flex;
+      flex-direction: column;
     }
     .section-title {
-      font-size: 13px;
+      font-size: 8.8pt;
       font-weight: 800;
       text-transform: uppercase;
+      letter-spacing: 0.6px;
+      color: #0F172A;
+      border-bottom: 1px solid #E2E8F0;
+      padding-bottom: 3px;
+      margin-bottom: 6px;
+    }
+
+    /* 3. Deliverables Table */
+    .deliverables-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 8.8pt;
+    }
+    .deliverables-table th {
+      background: #F1F5F9;
+      color: #475569;
+      font-weight: 700;
+      font-size: 7.8pt;
+      text-transform: uppercase;
       letter-spacing: 0.5px;
-      color: #111827;
-      border-bottom: 1px solid #E5E7EB;
-      padding-bottom: 6px;
-      margin: 18px 0 10px 0;
+      text-align: left;
+      padding: 5px 8px;
+      border-top: 1px solid #E2E8F0;
+      border-bottom: 1px solid #E2E8F0;
     }
-    .deliverable-item {
-      border-left: 3px solid #1A1A1A;
-      padding: 6px 0 6px 12px;
-      margin-bottom: 10px;
+    .deliverables-table td {
+      padding: 6px 8px;
+      border-bottom: 1px solid #F1F5F9;
+      vertical-align: top;
+      line-height: 1.35;
     }
-    .deliverable-header {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      margin-bottom: 3px;
+    .deliverables-table tr:last-child td {
+      border-bottom: 1px solid #E2E8F0;
     }
-    .deliverable-num {
+    .req-badge {
+      display: inline-block;
+      background: #E8F2F2;
+      border: 1px solid #B4D5D5;
+      color: #2D6A6A;
       font-weight: 700;
-      font-size: 11px;
-      color: #6B7280;
-    }
-    .deliverable-badge {
-      background: #F3F4F6;
-      border: 1px solid #E5E7EB;
-      font-size: 9.5px;
-      font-weight: 700;
-      padding: 1px 6px;
+      font-size: 8pt;
+      padding: 2px 6px;
       border-radius: 4px;
-      color: #374151;
     }
-    .deliverable-title {
-      font-size: 13px;
-      font-weight: 700;
-      color: #111827;
-    }
-    .deliverable-desc {
-      font-size: 12px;
-      color: #4B5563;
-      margin: 0;
-    }
-    .terms-box {
-      background: #F9FAFB;
-      border: 1px solid #E5E7EB;
-      border-radius: 8px;
-      padding: 12px 14px;
-      margin-bottom: 16px;
-    }
-    .terms-row {
+
+    /* 4. Terms Grid */
+    .terms-grid {
       display: flex;
-      justify-content: space-between;
-      padding: 4px 0;
-      font-size: 12px;
+      gap: 8px;
+      margin-bottom: 5px;
     }
-    .terms-label {
-      color: #6B7280;
-      font-weight: 600;
+    .term-card {
+      flex: 1;
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 5px;
+      padding: 7px 10px;
     }
-    .terms-value {
-      color: #111827;
+    .term-label {
+      font-size: 7.2pt;
       font-weight: 700;
+      color: #64748B;
+      text-transform: uppercase;
+      letter-spacing: 0.4px;
+      margin-bottom: 2px;
     }
-    .tax-clause-text {
-      font-size: 11.5px;
-      color: #374151;
-      margin-top: 8px;
-      padding-top: 8px;
-      border-top: 1px dashed #E5E7EB;
-      line-height: 1.4;
+    .term-value {
+      font-size: 10pt;
+      font-weight: 700;
+      color: #0F172A;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
-    .exclusions-box {
-      background: #FFFBEB;
-      border: 1px solid #FDE68A;
-      border-radius: 8px;
-      padding: 12px 14px;
-      margin-bottom: 16px;
+
+    /* Tax Box */
+    .tax-box {
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-left: 3.5px solid #4D8B8B;
+      border-radius: 4px;
+      padding: 5px 9px;
+      font-size: 8.2pt;
+      color: #334155;
+      line-height: 1.3;
     }
-    .exclusions-box-title {
-      font-size: 11px;
+    .tax-box strong {
+      color: #0F172A;
+    }
+
+    /* 5. Dual Legal & Exclusions Box */
+    .legal-grid {
+      display: flex;
+      gap: 10px;
+    }
+    .legal-card {
+      flex: 1;
+      border: 1px solid #E2E8F0;
+      border-radius: 5px;
+      padding: 7px 10px;
+      background: #FFFFFF;
+    }
+    .legal-card-title {
+      font-size: 7.5pt;
       font-weight: 700;
       text-transform: uppercase;
-      color: #92400E;
-      margin-bottom: 6px;
+      letter-spacing: 0.5px;
+      color: #0F172A;
+      margin-bottom: 4px;
     }
     .exclusions-list {
       margin: 0;
-      padding-left: 18px;
-      font-size: 11.5px;
-      color: #78350F;
+      padding-left: 14px;
+      font-size: 8.2pt;
+      color: #475569;
+      line-height: 1.35;
     }
-    .exclusion-item {
-      margin-bottom: 3px;
+    .exclusions-list li {
+      margin-bottom: 2px;
     }
-    .clauses-text {
-      font-size: 11px;
-      color: #4B5563;
-      line-height: 1.45;
-      margin-bottom: 10px;
+    .statutory-text {
+      font-size: 7.8pt;
+      color: #475569;
+      line-height: 1.3;
+      margin: 0;
     }
-    .signatures-grid {
+    .statutory-text div {
+      margin-bottom: 2px;
+    }
+    .statutory-text strong {
+      color: #0F172A;
+    }
+
+    /* 6. Signatures Section */
+    .signatures-section {
+      border-top: 1px solid #E2E8F0;
+      padding-top: 7px;
+    }
+    .signatures-preamble {
+      font-size: 7.8pt;
+      color: #64748B;
+      font-style: italic;
+      margin-bottom: 7px;
+    }
+    .signatures-row {
       display: flex;
-      gap: 32px;
-      margin-top: 28px;
-      page-break-inside: avoid;
+      gap: 16px;
     }
-    .signature-col {
+    .signature-card {
       flex: 1;
-      border-top: 1px solid #9CA3AF;
-      padding-top: 8px;
+      background: #F8FAFC;
+      border: 1px solid #E2E8F0;
+      border-radius: 5px;
+      padding: 8px 12px;
     }
-    .sign-role {
-      font-size: 10px;
+    .sig-role {
+      font-size: 7.5pt;
       font-weight: 700;
       text-transform: uppercase;
-      color: #6B7280;
+      letter-spacing: 0.8px;
+      color: #64748B;
     }
-    .sign-name {
-      font-size: 13px;
+    .sig-name {
+      font-size: 10.5pt;
       font-weight: 700;
-      color: #111827;
-      margin-top: 2px;
+      color: #0F172A;
+      margin: 2px 0 10px 0;
     }
-    .sign-line {
-      font-size: 11px;
-      color: #6B7280;
-      margin-top: 12px;
+    .sig-lines {
+      border-top: 1px dashed #CBD5E1;
+      padding-top: 5px;
+      display: flex;
+      justify-content: space-between;
+      font-size: 7.8pt;
+      color: #64748B;
     }
-    .footer-note {
-      margin-top: 32px;
-      text-align: center;
-      font-size: 10px;
-      color: #9CA3AF;
-      border-top: 1px solid #F3F4F6;
-      padding-top: 8px;
+
+    /* 7. Footer */
+    .footer-bar {
+      border-top: 1px solid #E2E8F0;
+      padding-top: 5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 7.5pt;
+      color: #94A3B8;
+    }
+    .footer-seal {
+      font-weight: 600;
+      color: #64748B;
     }
   </style>
 </head>
 <body>
-  <div class="container">
+  <div class="document-page">
     <div class="header-bar">
       <div>
-        <div class="doc-eyebrow">Kasunduan Vault · Service Agreement</div>
-        <h1 class="doc-title">${escape(agreement.title)}</h1>
+        <div class="doc-eyebrow">OwlSet · Kasunduan Vault</div>
+        <h1 class="doc-title">FREELANCE SERVICE AGREEMENT</h1>
+        <div class="project-name">${escape(agreement.title)}</div>
       </div>
       <div class="header-meta">
+        <div>Ref: <strong>${escape(agreement.id)}</strong></div>
         <div>Effective: <strong>${escape(formattedDate)}</strong></div>
-        <div class="version-tag">Version ${agreement.versionNumber}.0</div>
+        <div class="version-tag">Version ${agreement.versionNumber}.0 · Sealed</div>
       </div>
     </div>
 
     <div class="parties-grid">
       <div class="party-card">
-        <div class="party-role">Client</div>
+        <div class="party-role">Client / Principal</div>
         <div class="party-name">${escape(clientName)}</div>
-        ${clientTin ? `<div class="party-detail">TIN: ${escape(clientTin)}</div>` : ''}
-        ${clientAddress ? `<div class="party-detail">Address: ${escape(clientAddress)}</div>` : ''}
+        <div class="party-detail">
+          ${clientTin && clientTin !== 'N/A' ? `TIN: ${escape(clientTin)} · ` : ''}${escape(clientAddress || 'Address on file with project')}
+        </div>
       </div>
       <div class="party-card">
         <div class="party-role">Independent Freelancer</div>
         <div class="party-name">${escape(freelancerName)}</div>
-        ${freelancerTin ? `<div class="party-detail">TIN: ${escape(freelancerTin)}</div>` : ''}
-        ${freelancerAddress ? `<div class="party-detail">Address: ${escape(freelancerAddress)}</div>` : ''}
+        <div class="party-detail">
+          ${freelancerTin && freelancerTin !== 'N/A' ? `TIN: ${escape(freelancerTin)} · ` : ''}${escape(freelancerAddress || 'Independent Contractor · Manila, Philippines')}
+        </div>
       </div>
     </div>
 
-    <div class="section-title">1. Agreed Deliverables & Scope</div>
-    ${deliverablesHtml}
+    <div class="section-block">
+      <div class="section-title">1. Agreed Deliverables &amp; Specifications</div>
+      <table class="deliverables-table">
+        <thead>
+          <tr>
+            <th style="width: 24px; text-align: center;">#</th>
+            <th style="width: 76px;">Item Code</th>
+            <th style="width: 190px;">Deliverable Name</th>
+            <th>Detailed Scope &amp; Deliverable Specifications</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${deliverablesRowsHtml}
+        </tbody>
+      </table>
+    </div>
 
-    <div class="section-title">2. Financials & Tax Compliance</div>
-    <div class="terms-box">
-      <div class="terms-row">
-        <span class="terms-label">Total Compensation:</span>
-        <span class="terms-value">${feeText}</span>
+    <div class="section-block">
+      <div class="section-title">2. Commercial Terms &amp; Statutory Tax Compliance</div>
+      <div class="terms-grid">
+        <div class="term-card">
+          <div class="term-label">Total Compensation</div>
+          <div class="term-value">${feeText}</div>
+        </div>
+        <div class="term-card">
+          <div class="term-label">Timeline</div>
+          <div class="term-value">${timelineText}</div>
+        </div>
+        <div class="term-card">
+          <div class="term-label">Payment Method</div>
+          <div class="term-value">${escape(paymentMethod)}</div>
+        </div>
+        <div class="term-card">
+          <div class="term-label">Included Revisions</div>
+          <div class="term-value">${escape(agreement.revisionTerms || '2 rounds included')}</div>
+        </div>
       </div>
-      <div class="terms-row">
-        <span class="terms-label">Payment Method:</span>
-        <span class="terms-value">${escape(paymentMethod)}</span>
-      </div>
-      <div class="terms-row">
-        <span class="terms-label">Delivery Timeline:</span>
-        <span class="terms-value">${timelineText}</span>
-      </div>
-      <div class="terms-row">
-        <span class="terms-label">Included Revisions:</span>
-        <span class="terms-value">${escape(agreement.revisionTerms || 'Not recorded')}</span>
-      </div>
-      <div class="tax-clause-text">
-        <strong>Tax Compliance (EOPT Act RA 11976 / BIR):</strong> ${taxDescription}
+      <div class="tax-box">
+        <strong>Statutory Tax Compliance (EOPT Act RA 11976 / BIR):</strong> ${taxDescription} Official commercial or BIR invoice issued upon milestone settlement.
       </div>
     </div>
 
-    <div class="section-title">3. ScopeGuard Exclusions & Change Management</div>
-    <div class="exclusions-box">
-      <div class="exclusions-box-title">Explicitly Excluded from Scope</div>
-      <ul class="exclusions-list">
-        ${exclusionsHtml}
-      </ul>
-    </div>
-    <p class="clauses-text">
-      Any requests outside the specified deliverables require an explicit Change Proposal and fee agreement before commencement. Intellectual property rights transfer upon complete settlement pursuant to RA 8293. Confidentiality is safeguarded pursuant to RA 10173 (Data Privacy Act of 2012).
-    </p>
-
-    <div class="signatures-grid">
-      <div class="signature-col">
-        <div class="sign-role">Confirmed by Client</div>
-        <div class="sign-name">${escape(clientName)}</div>
-        <div class="sign-line">Signature: __________________________</div>
-        <div class="sign-line">Date: _______________________________</div>
-      </div>
-      <div class="signature-col">
-        <div class="sign-role">Confirmed by Freelancer</div>
-        <div class="sign-name">${escape(freelancerName)}</div>
-        <div class="sign-line">Signature: __________________________</div>
-        <div class="sign-line">Date: _______________________________</div>
+    <div class="section-block">
+      <div class="section-title">3. ScopeGuard™ Exclusions &amp; Legal Governance</div>
+      <div class="legal-grid">
+        <div class="legal-card">
+          <div class="legal-card-title">Explicit Scope Exclusions</div>
+          <ul class="exclusions-list">
+            ${exclusionsHtml}
+          </ul>
+        </div>
+        <div class="legal-card">
+          <div class="legal-card-title">Statutory Legal Protections</div>
+          <div class="statutory-text">
+            <div>• <strong>RA 8293 IP Code:</strong> Deliverable copyrights transfer to Client solely upon 100% full payment settlement.</div>
+            <div>• <strong>ScopeGuard™ Protocol:</strong> Any out-of-scope requests require a mutually signed Change Order prior to work.</div>
+            <div>• <strong>RA 10173 Data Privacy:</strong> Proprietary data, source assets, and communications strictly safeguarded.</div>
+          </div>
+        </div>
       </div>
     </div>
 
-    <div class="footer-note">
-      Document Ref: ${escape(agreement.id)} · Diligent Dev Kasunduan Vault · Sealed Offline Baseline
+    <div class="signatures-section">
+      <div class="signatures-preamble">
+        IN WITNESS WHEREOF, the Parties hereto execute this Agreement enforceable under Philippine commercial law as of the Effective Date.
+      </div>
+      <div class="signatures-row">
+        <div class="signature-card">
+          <div class="sig-role">Confirmed by Client</div>
+          <div class="sig-name">${escape(clientName)}</div>
+          <div class="sig-lines">
+            <span>Signature: __________________________</span>
+            <span>Date: ____________</span>
+          </div>
+        </div>
+        <div class="signature-card">
+          <div class="sig-role">Confirmed by Freelancer</div>
+          <div class="sig-name">${escape(freelancerName)}</div>
+          <div class="sig-lines">
+            <span>Signature: __________________________</span>
+            <span>Date: ____________</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer-bar">
+      <span>Ref: ${escape(agreement.id)} · Sealed Offline Baseline</span>
+      <span class="footer-seal">OwlSet Kasunduan Vault · Republic of the Philippines</span>
+      <span>Page 1 of 1</span>
     </div>
   </div>
 </body>

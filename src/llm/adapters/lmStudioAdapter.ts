@@ -9,6 +9,29 @@ export interface LMStudioAdapterConfig {
   timeoutMs?: number;
 }
 
+export interface ConnectionStatus {
+  available: boolean;
+  error?: string;
+  models: string[];
+  activeModel: string;
+  url: string;
+}
+
+export function normalizeLlmUrl(rawUrl: string): string {
+  let trimmed = rawUrl.trim();
+  if (!trimmed) {
+    return Platform.OS === 'android' ? 'http://10.0.2.2:1234/v1' : 'http://localhost:1234/v1';
+  }
+  if (!/^https?:\/\//i.test(trimmed)) {
+    trimmed = `http://${trimmed}`;
+  }
+  trimmed = trimmed.replace(/\/+$/, '');
+  if (!/\/v1$/i.test(trimmed)) {
+    trimmed = `${trimmed}/v1`;
+  }
+  return trimmed;
+}
+
 export class LMStudioAdapter implements LLMEngine {
   private readonly timeoutMs: number;
   private readonly getBaseUrl: () => Promise<string>;
@@ -23,11 +46,16 @@ export class LMStudioAdapter implements LLMEngine {
     this.getModel = config.getModel ?? (async () => 'local-model');
   }
 
+  async getEffectiveUrl(): Promise<string> {
+    const raw = await this.getBaseUrl();
+    return normalizeLlmUrl(raw);
+  }
+
   async isAvailable(): Promise<boolean> {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), 6000);
     try {
-      const baseUrl = await this.getBaseUrl();
+      const baseUrl = await this.getEffectiveUrl();
       const model = await this.getModel();
 
       const response = await fetch(`${baseUrl}/models`, {
@@ -47,12 +75,59 @@ export class LMStudioAdapter implements LLMEngine {
     }
   }
 
+  async checkConnection(): Promise<ConnectionStatus> {
+    const baseUrl = await this.getEffectiveUrl();
+    const activeModel = await this.getModel();
+
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 5000);
+
+      const response = await fetch(`${baseUrl}/models`, {
+        method: 'GET',
+        signal: controller.signal,
+      });
+
+      clearTimeout(timer);
+
+      if (!response.ok) {
+        return {
+          available: false,
+          error: `Server responded with HTTP ${response.status}`,
+          models: [],
+          activeModel,
+          url: baseUrl,
+        };
+      }
+
+      const data = (await response.json()) as { data?: { id?: string }[] };
+      const modelList = Array.isArray(data.data)
+        ? data.data.map((m) => m.id).filter((id): id is string => typeof id === 'string')
+        : [];
+
+      return {
+        available: true,
+        models: modelList,
+        activeModel: modelList.length > 0 && activeModel === 'local-model' ? modelList[0] : activeModel,
+        url: baseUrl,
+      };
+    } catch (err) {
+      return {
+        available: false,
+        error: (err as Error).message || 'Connection refused or timed out',
+        models: [],
+        activeModel,
+        url: baseUrl,
+      };
+    }
+  }
+
   async generate(messages: LLMMessage[], options: GenerationOptions = {}): Promise<string> {
     return withKeepAwake(() => this.generateResponse(messages, options));
   }
 
   private async generateResponse(messages: LLMMessage[], options: GenerationOptions): Promise<string> {
-    const baseUrl = await this.getBaseUrl();
+    const baseUrl = await this.getEffectiveUrl();
     const model = await this.getModel();
 
     const controller = new AbortController();

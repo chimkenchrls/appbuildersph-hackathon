@@ -28,3 +28,4 @@ local-ai/.env
 local-ai/backend/__pycache__/
 # Python caches
 __pycache__/
+.superpowers/

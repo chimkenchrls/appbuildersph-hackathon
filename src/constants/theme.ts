@@ -1,6 +1,6 @@
 import { Platform, type TextStyle } from 'react-native';
 /**
- * Saklaw Theme Tokens - Light Mode First
+ * OwlSet Theme Tokens - Light Mode First
  * Derived from the approved UI design specification.
  */
 

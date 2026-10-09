@@ -6,29 +6,142 @@ import {
   ScrollView,
   Pressable,
   ActivityIndicator,
+  TextInput,
 } from 'react-native';
 import { HeaderBar } from '@/components/HeaderBar';
 import { colors, radii, spacing, shadows } from '@/constants/theme';
 import { AppIcon } from '@/components/Icon';
+import { hapticSuccess } from '@/utils/haptics';
 import type { AppServices } from '@/services/bootstrapService';
 
 interface SettingsScreenProps {
   services: AppServices | null;
   onDataReset: () => Promise<void>;
+  onProfileUpdated?: (name: string, role: string) => void;
 }
 
-export function SettingsScreen({ services, onDataReset }: SettingsScreenProps) {
+export function SettingsScreen({ services, onDataReset, onProfileUpdated }: SettingsScreenProps) {
   const [resetting, setResetting] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+
+  // Freelancer Profile State
+  const [freelancerName, setFreelancerName] = useState('');
+  const [freelancerRole, setFreelancerRole] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileFeedback, setProfileFeedback] = useState<string | null>(null);
+
+  // Local LLM State
+  const [llmUrl, setLlmUrl] = useState('');
+  const [llmModel, setLlmModel] = useState('');
+  const [testingLlm, setTestingLlm] = useState(false);
+  const [savingLlm, setSavingLlm] = useState(false);
+  const [testResult, setTestResult] = useState<{
+    ok: boolean;
+    message: string;
+    models?: string[];
+  } | null>(null);
+
+  React.useEffect(() => {
+    async function loadSettings() {
+      if (!services) return;
+      try {
+        const name = await services.repositories.settings.get('freelancer_name');
+        const role = await services.repositories.settings.get('freelancer_role');
+        if (name) setFreelancerName(name);
+        if (role) setFreelancerRole(role);
+
+        const url = await services.repositories.settings.get('lm_studio_url');
+        const model = await services.repositories.settings.get('lm_studio_model');
+        const effectiveUrl = await services.llmEngine.getEffectiveUrl();
+        setLlmUrl(url || effectiveUrl);
+        setLlmModel(model || 'local-model');
+      } catch {
+        // ignore
+      }
+    }
+    loadSettings();
+  }, [services]);
+
+  const handleSaveProfile = async () => {
+    if (!services) return;
+    const trimmed = freelancerName.trim();
+    if (!trimmed) {
+      setProfileFeedback('Name cannot be empty.');
+      return;
+    }
+    setSavingProfile(true);
+    setProfileFeedback(null);
+    try {
+      await services.repositories.settings.set('freelancer_name', trimmed);
+      await services.repositories.settings.set('freelancer_role', freelancerRole.trim());
+      onProfileUpdated?.(trimmed, freelancerRole.trim());
+      setProfileFeedback('Freelancer profile updated for contracts and PDF exports.');
+      await hapticSuccess();
+    } catch (err) {
+      setProfileFeedback('Failed to update profile: ' + (err as Error).message);
+    } finally {
+      setSavingProfile(false);
+    }
+  };
+
+  const handleTestConnection = async () => {
+    if (!services) return;
+    setTestingLlm(true);
+    setTestResult(null);
+    try {
+      if (llmUrl.trim()) {
+        await services.repositories.settings.set('lm_studio_url', llmUrl.trim());
+      }
+      if (llmModel.trim()) {
+        await services.repositories.settings.set('lm_studio_model', llmModel.trim());
+      }
+      const status = await services.llmEngine.checkConnection();
+      if (status.available) {
+        setTestResult({
+          ok: true,
+          message: status.models.length > 0
+            ? `Connected! Loaded models: ${status.models.slice(0, 3).join(', ')}${status.models.length > 3 ? ` (+${status.models.length - 3} more)` : ''}`
+            : 'Connected successfully to Local AI server.',
+          models: status.models,
+        });
+      } else {
+        setTestResult({
+          ok: false,
+          message: status.error || `Server unreachable at ${status.url}. Make sure LM Studio / Ollama is running with CORS enabled.`,
+        });
+      }
+    } catch (err) {
+      setTestResult({
+        ok: false,
+        message: (err as Error).message || 'Failed to connect to local server.',
+      });
+    } finally {
+      setTestingLlm(false);
+    }
+  };
+
+  const handleSaveLlm = async () => {
+    if (!services) return;
+    setSavingLlm(true);
+    try {
+      await services.repositories.settings.set('lm_studio_url', llmUrl.trim());
+      await services.repositories.settings.set('lm_studio_model', llmModel.trim());
+      setFeedbackMessage('Local LLM configuration saved.');
+    } catch (err) {
+      setFeedbackMessage('Failed to save settings: ' + (err as Error).message);
+    } finally {
+      setSavingLlm(false);
+    }
+  };
 
   const handleReset = async () => {
     setResetting(true);
     setFeedbackMessage(null);
     try {
       await onDataReset();
-      setFeedbackMessage('Workspace sample data reseeded successfully.');
+      setFeedbackMessage('Workspace data reset successfully.');
     } catch (err) {
-      setFeedbackMessage((err as Error).message || 'Failed to reseed database.');
+      setFeedbackMessage((err as Error).message || 'Failed to reset database.');
     } finally {
       setResetting(false);
     }
@@ -55,7 +168,205 @@ export function SettingsScreen({ services, onDataReset }: SettingsScreenProps) {
           </Text>
         </View>
 
-        {/* Card 1: Privacy Architecture */}
+        {/* Card 0: Freelancer Profile */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.cardTitle}>Freelancer Identity</Text>
+            <View style={styles.badgeSuccess}>
+              <Text style={styles.badgeSuccessText}>Active</Text>
+            </View>
+          </View>
+          <Text style={styles.cardSubtitle}>
+            Your legal name and professional title stamped on generated Kasunduan contracts and PDF exports.
+          </Text>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Full Legal Name</Text>
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={styles.textInput}
+                value={freelancerName}
+                onChangeText={setFreelancerName}
+                placeholder="e.g. Maria Santos or Juan Dela Cruz"
+                placeholderTextColor={colors.placeholder}
+                autoCapitalize="words"
+                autoCorrect={false}
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Professional Role or Title</Text>
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={styles.textInput}
+                value={freelancerRole}
+                onChangeText={setFreelancerRole}
+                placeholder="e.g. Full-Stack Developer or UI/UX Designer"
+                placeholderTextColor={colors.placeholder}
+                autoCapitalize="words"
+                autoCorrect={false}
+              />
+            </View>
+          </View>
+
+          {profileFeedback && (
+            <View style={styles.testResultSuccess}>
+              <AppIcon name="check" size={14} color={colors.successText} />
+              <Text style={styles.testResultSuccessText}>{profileFeedback}</Text>
+            </View>
+          )}
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.saveLlmButton,
+              { marginTop: spacing.sm },
+              pressed && styles.saveLlmButtonPressed,
+              savingProfile && styles.buttonDisabled,
+            ]}
+            onPress={handleSaveProfile}
+            disabled={savingProfile}
+            accessibilityRole="button"
+            accessibilityLabel="Save Freelancer Profile"
+          >
+            {savingProfile ? (
+              <ActivityIndicator size="small" color={colors.onPrimary} />
+            ) : (
+              <Text style={styles.saveLlmButtonText}>Update Profile</Text>
+            )}
+          </Pressable>
+        </View>
+
+        {/* Card 1: Local LLM Configuration */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.cardTitle}>Local LLM Engine</Text>
+            <View style={testResult?.ok ? styles.badgeSuccess : styles.badgeNeutral}>
+              <Text style={testResult?.ok ? styles.badgeSuccessText : styles.badgeNeutralText}>
+                {testResult ? (testResult.ok ? 'Connected' : 'Offline') : 'LM Studio / Ollama'}
+              </Text>
+            </View>
+          </View>
+          <Text style={styles.cardSubtitle}>
+            Configure your on-device or local network LLM server for AI scope generation.
+          </Text>
+
+          {/* Endpoint Input */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Server Base URL</Text>
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={styles.textInput}
+                value={llmUrl}
+                onChangeText={setLlmUrl}
+                placeholder="http://10.0.2.2:1234/v1"
+                placeholderTextColor={colors.placeholder}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+          </View>
+
+          {/* Quick Preset Buttons */}
+          <View style={styles.presetsRow}>
+            <Pressable
+              style={styles.presetPill}
+              onPress={() => setLlmUrl('http://10.0.2.2:1234/v1')}
+            >
+              <Text style={styles.presetPillText}>Android Emulator</Text>
+            </Pressable>
+            <Pressable
+              style={styles.presetPill}
+              onPress={() => setLlmUrl('http://127.0.0.1:1234/v1')}
+            >
+              <Text style={styles.presetPillText}>Localhost (1234)</Text>
+            </Pressable>
+            <Pressable
+              style={styles.presetPill}
+              onPress={() => setLlmUrl('http://127.0.0.1:11434/v1')}
+            >
+              <Text style={styles.presetPillText}>Ollama (11434)</Text>
+            </Pressable>
+          </View>
+
+          {/* Model Name Input */}
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Model Identifier</Text>
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={styles.textInput}
+                value={llmModel}
+                onChangeText={setLlmModel}
+                placeholder="local-model or qwen2.5-coder-7b-instruct"
+                placeholderTextColor={colors.placeholder}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+            </View>
+          </View>
+
+          {/* Test Result Message */}
+          {testResult && (
+            <View
+              style={testResult.ok ? styles.testResultSuccess : styles.testResultError}
+            >
+              <AppIcon
+                name={testResult.ok ? 'check' : 'alert-circle'}
+                size={14}
+                color={testResult.ok ? colors.successText : colors.errorText}
+              />
+              <Text
+                style={testResult.ok ? styles.testResultSuccessText : styles.testResultErrorText}
+              >
+                {testResult.message}
+              </Text>
+            </View>
+          )}
+
+          {/* Action Buttons Row */}
+          <View style={styles.llmActionsRow}>
+            <Pressable
+              style={({ pressed }) => [
+                styles.testButton,
+                pressed && styles.testButtonPressed,
+                testingLlm && styles.buttonDisabled,
+              ]}
+              onPress={handleTestConnection}
+              disabled={testingLlm}
+              accessibilityRole="button"
+              accessibilityLabel="Test Local LLM connection"
+            >
+              {testingLlm ? (
+                <ActivityIndicator size="small" color={colors.primary} />
+              ) : (
+                <>
+                  <AppIcon name="sparkles" size={14} color={colors.primary} />
+                  <Text style={styles.testButtonText}>Test Connection</Text>
+                </>
+              )}
+            </Pressable>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.saveLlmButton,
+                pressed && styles.saveLlmButtonPressed,
+                savingLlm && styles.buttonDisabled,
+              ]}
+              onPress={handleSaveLlm}
+              disabled={savingLlm}
+              accessibilityRole="button"
+              accessibilityLabel="Save LLM Configuration"
+            >
+              {savingLlm ? (
+                <ActivityIndicator size="small" color={colors.onPrimary} />
+              ) : (
+                <Text style={styles.saveLlmButtonText}>Save Config</Text>
+              )}
+            </Pressable>
+          </View>
+        </View>
+
+        {/* Card 2: Privacy Architecture */}
         <View style={styles.card}>
           <View style={styles.cardHeaderRow}>
             <Text style={styles.cardTitle}>Offline Architecture</Text>
@@ -87,7 +398,7 @@ export function SettingsScreen({ services, onDataReset }: SettingsScreenProps) {
           </View>
         </View>
 
-        {/* Card 2: Legal Engine & Tax Compliance */}
+        {/* Card 3: Legal Engine & Tax Compliance */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Philippine Legal Standard</Text>
           <Text style={styles.cardSubtitle}>
@@ -107,11 +418,11 @@ export function SettingsScreen({ services, onDataReset }: SettingsScreenProps) {
           </View>
         </View>
 
-        {/* Card 3: Storage & Maintenance */}
+        {/* Card 4: Storage & Maintenance */}
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Data Maintenance</Text>
           <Text style={styles.cardSubtitle}>
-            Saved records are protected. Destructive sample resets are unavailable.
+            Reset workspace to default clean baseline state.
           </Text>
 
           {feedbackMessage ? (
@@ -129,12 +440,12 @@ export function SettingsScreen({ services, onDataReset }: SettingsScreenProps) {
             onPress={handleReset}
             disabled={true}
             accessibilityRole="button"
-            accessibilityLabel="Reseed sample workspace data"
+            accessibilityLabel="Reset workspace data"
           >
             {resetting ? (
               <ActivityIndicator size="small" color={colors.primary} />
             ) : (
-              <Text style={styles.resetButtonText}>Sample reset unavailable</Text>
+              <Text style={styles.resetButtonText}>Reset Workspace Baseline</Text>
             )}
           </Pressable>
         </View>
@@ -281,5 +592,135 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '700',
     color: colors.primary,
+  },
+  badgeNeutral: {
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: radii.sm,
+  },
+  badgeNeutralText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textSecondary,
+  },
+  inputGroup: {
+    gap: 6,
+  },
+  inputLabel: {
+    fontSize: 12.5,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  inputWrapper: {
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: radii.md,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  textInput: {
+    fontSize: 13,
+    color: colors.textPrimary,
+    padding: 0,
+  },
+  presetsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+    marginTop: -2,
+  },
+  presetPill: {
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radii.sm,
+  },
+  presetPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  testResultSuccess: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.successSurface,
+    borderWidth: 1,
+    borderColor: colors.successBorder,
+    borderRadius: radii.md,
+    padding: 10,
+  },
+  testResultSuccessText: {
+    fontSize: 12,
+    color: colors.successText,
+    fontWeight: '600',
+    flex: 1,
+  },
+  testResultError: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.errorSurface,
+    borderWidth: 1,
+    borderColor: colors.errorBorder,
+    borderRadius: radii.md,
+    padding: 10,
+  },
+  testResultErrorText: {
+    fontSize: 12,
+    color: colors.errorText,
+    fontWeight: '600',
+    flex: 1,
+  },
+  llmActionsRow: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 4,
+  },
+  testButton: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: radii.button,
+    paddingVertical: 11,
+    ...shadows.subtle,
+  },
+  testButtonPressed: {
+    backgroundColor: colors.primaryLight,
+  },
+  testButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  saveLlmButton: {
+    backgroundColor: colors.primary,
+    borderRadius: radii.button,
+    paddingHorizontal: 20,
+    paddingVertical: 11,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  saveLlmButtonPressed: {
+    backgroundColor: colors.primaryPressed,
+  },
+  saveLlmButtonText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.onPrimary,
+  },
+  buttonDisabled: {
+    opacity: 0.6,
   },
 });

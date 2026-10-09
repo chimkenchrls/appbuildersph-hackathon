@@ -17,7 +17,7 @@ export function HeaderBar({
   onBack,
   showBack = false,
 }: HeaderBarProps) {
-  const isRootBrand = !showBack && title === 'Saklaw';
+  const isRootBrand = !showBack && (title === 'OwlSet' || title === 'Saklaw');
 
   return (
     <View style={styles.container}>

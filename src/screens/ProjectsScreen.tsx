@@ -5,10 +5,13 @@ import {
   View,
   ScrollView,
   Pressable,
+  Alert,
+  Platform,
 } from 'react-native';
 import { HeaderBar } from '@/components/HeaderBar';
 import { colors, radii, spacing, shadows } from '@/constants/theme';
 import { CardWatermarkSvg } from '@/components/CardWatermarkSvg';
+import { AppIcon } from '@/components/Icon';
 import type { Project, Agreement } from '@/types/domain';
 
 export type ProjectFilter = 'all' | 'drafting' | 'accepted';
@@ -20,6 +23,7 @@ interface ProjectsScreenProps {
   onViewProjectOverview: (projectId: string) => void;
   onNewProject: () => void;
   onReleaseProject?: (projectId: string) => void;
+  onDeleteProject?: (projectId: string) => void;
 }
 
 export function ProjectsScreen({
@@ -29,18 +33,50 @@ export function ProjectsScreen({
   onViewProjectOverview,
   onNewProject,
   onReleaseProject,
+  onDeleteProject,
 }: ProjectsScreenProps) {
   const [filter, setFilter] = React.useState<ProjectFilter>('all');
 
-  const draftingCount = projects.filter(
+  // Deduplicate projects by ID to safeguard UI rendering
+  const uniqueProjects = React.useMemo(() => {
+    const seen = new Set<string>();
+    return projects.filter((p) => {
+      if (seen.has(p.id)) return false;
+      seen.add(p.id);
+      return true;
+    });
+  }, [projects]);
+
+  const handleConfirmDelete = (project: Project) => {
+    if (Platform.OS === 'web') {
+      if (typeof window !== 'undefined' && window.confirm(`Are you sure you want to delete "${project.title}"? This cannot be undone.`)) {
+        onDeleteProject?.(project.id);
+      }
+    } else {
+      Alert.alert(
+        'Delete Project',
+        `Are you sure you want to delete "${project.title}"? This will permanently remove all agreements and requests for this project.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => onDeleteProject?.(project.id),
+          },
+        ],
+      );
+    }
+  };
+
+  const draftingCount = uniqueProjects.filter(
     (p) => !(projectAgreements[p.id] && projectAgreements[p.id].length > 0),
   ).length;
 
-  const acceptedCount = projects.filter(
+  const acceptedCount = uniqueProjects.filter(
     (p) => projectAgreements[p.id] && projectAgreements[p.id].length > 0,
   ).length;
 
-  const filteredProjects = projects.filter((p) => {
+  const filteredProjects = uniqueProjects.filter((p) => {
     const isAccepted = projectAgreements[p.id] && projectAgreements[p.id].length > 0;
     if (filter === 'drafting') return !isAccepted;
     if (filter === 'accepted') return isAccepted;
@@ -199,29 +235,46 @@ export function ProjectsScreen({
                   {/* Subtle Corner Watermark SVG */}
                   <CardWatermarkSvg opacity={0.09} position="top-right" />
 
-                  {/* Top row: Project title + status badge */}
+                  {/* Top row: Project title + status badge + delete option */}
                   <View style={styles.cardHeaderRow}>
                     <Text style={styles.cardTitle} numberOfLines={2}>
                       {project.title}
                     </Text>
-                    <View
-                      style={[
-                        styles.statusBadge,
-                        hasConfirmed
-                          ? styles.statusBadgeAccepted
-                          : styles.statusBadgeDrafting,
-                      ]}
-                    >
-                      <Text
+                    <View style={styles.cardHeaderRightActions}>
+                      <View
                         style={[
-                          styles.cardStatus,
+                          styles.statusBadge,
                           hasConfirmed
-                            ? styles.cardStatusAcceptedText
-                            : styles.cardStatusDraftingText,
+                            ? styles.statusBadgeAccepted
+                            : styles.statusBadgeDrafting,
                         ]}
                       >
-                        {statusText}
-                      </Text>
+                        <Text
+                          style={[
+                            styles.cardStatus,
+                            hasConfirmed
+                              ? styles.cardStatusAcceptedText
+                              : styles.cardStatusDraftingText,
+                          ]}
+                        >
+                          {statusText}
+                        </Text>
+                      </View>
+
+                      {onDeleteProject && (
+                        <Pressable
+                          style={styles.deleteProjectBtn}
+                          onPress={(e) => {
+                            e.stopPropagation?.();
+                            handleConfirmDelete(project);
+                          }}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Delete project ${project.title}`}
+                        >
+                          <AppIcon name="trash" size={14} color={colors.textMuted} />
+                        </Pressable>
+                      )}
                     </View>
                   </View>
 
@@ -446,6 +499,19 @@ const styles = StyleSheet.create({
     flex: 1,
     letterSpacing: -0.2,
     lineHeight: 22,
+  },
+  cardHeaderRightActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
+  },
+  deleteProjectBtn: {
+    padding: 5,
+    borderRadius: radii.sm,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
   },
   statusBadge: {
     paddingHorizontal: 8,

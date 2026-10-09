@@ -26,7 +26,11 @@ export interface ProposalScreenProps {
   availableItems?: string[];
   onBack: () => void;
   onSaveProposal?: (proposal: ChangeProposal) => Promise<void> | void;
-  onAcceptProposal?: () => void;
+  onAcceptProposal?: (
+    selectedItems?: string[],
+    fee?: number | null,
+    days?: number | null,
+  ) => void;
 }
 
 export function ProposalEditorScreen({
@@ -35,13 +39,12 @@ export function ProposalEditorScreen({
   proposal,
   availableItems,
   onSaveProposal,
+  onAcceptProposal,
 }: ProposalScreenProps) {
-  // Determine available additions to list
-  const defaultItems: string[] = [];
   const allAdditions = Array.from(
     new Set([
       ...(availableItems && availableItems.length > 0 ? availableItems : []),
-      ...(proposal.selectedItems && proposal.selectedItems.length > 0 ? proposal.selectedItems : defaultItems),
+      ...(proposal.selectedItems && proposal.selectedItems.length > 0 ? proposal.selectedItems : []),
     ]),
   );
 
@@ -52,15 +55,22 @@ export function ProposalEditorScreen({
   );
 
   const [feeEstimate, setFeeEstimate] = useState<string>(
-    proposal.freelancerFeeEstimate != null ? String(proposal.freelancerFeeEstimate) : '',
+    proposal.freelancerFeeEstimate != null && proposal.freelancerFeeEstimate > 0
+      ? String(proposal.freelancerFeeEstimate)
+      : '',
   );
 
   const [daysEstimate, setDaysEstimate] = useState<string>(
-    proposal.freelancerDaysEstimate != null ? String(proposal.freelancerDaysEstimate) : '',
+    proposal.freelancerDaysEstimate != null && proposal.freelancerDaysEstimate > 0
+      ? String(proposal.freelancerDaysEstimate)
+      : '',
   );
 
+  const defaultDraftMessage =
+    'Hi! Thanks for sharing the updates. The requested items introduce additional deliverables outside our current confirmed agreement. Please review this proposed change and let me know if you would like to proceed.';
+
   const [draftMessage, setDraftMessage] = useState<string>(
-    proposal.draftMessage,
+    proposal.draftMessage || defaultDraftMessage,
   );
 
   const [feedback, setFeedback] = useState<string | null>(null);
@@ -169,7 +179,7 @@ export function ProposalEditorScreen({
           {/* Status Badge */}
           <View style={styles.statusBadge}>
             <AppIcon name="document" size={13} color={colors.textSecondary} />
-            <Text style={styles.statusText}>Draft · Awaiting client review</Text>
+            <Text style={styles.statusText}>Draft · For offline client discussion</Text>
           </View>
         </View>
 
@@ -307,6 +317,32 @@ export function ProposalEditorScreen({
 
         {/* Primary and Secondary Action Buttons */}
         <View style={styles.actionsContainer}>
+          {onAcceptProposal && (
+            <Pressable
+              style={({ pressed }) => [
+                styles.acceptButton,
+                pressed && styles.acceptButtonPressed,
+              ]}
+              onPress={async () => {
+                await hapticSuccess();
+                const fee = feeEstimate.trim()
+                  ? parseInt(feeEstimate.replace(/[^0-9]/g, ''), 10)
+                  : null;
+                const days = daysEstimate.trim()
+                  ? parseInt(daysEstimate.replace(/[^0-9]/g, ''), 10)
+                  : null;
+                onAcceptProposal(selectedItems, fee, days);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Accept scope change and seal new agreement"
+            >
+              <AppIcon name="check" size={18} color="#FFFFFF" />
+              <Text style={styles.acceptButtonText}>
+                Accept Scope Change (Agreed with client)
+              </Text>
+            </Pressable>
+          )}
+
           <Pressable
             style={({ pressed }) => [
               styles.saveButton,
@@ -319,7 +355,7 @@ export function ProposalEditorScreen({
           >
             <AppIcon name="document" size={16} color={colors.onPrimary} />
             <Text style={styles.saveButtonText}>
-              {isSaving ? 'Saving...' : 'Save draft'}
+              {isSaving ? 'Saving...' : 'Save proposal draft'}
             </Text>
           </Pressable>
 
@@ -355,10 +391,10 @@ export function ProposalEditorScreen({
         {/* Footnote Disclaimers */}
         <View style={styles.footerNoteContainer}>
           <Text style={styles.footerNoteText}>
-            Saving or sharing does not change {agreementLabel}.
+            Discuss this proposal with your client via chat, call, or in person.
           </Text>
           <Text style={styles.footerNoteText}>
-            Client approval is not recorded automatically.
+            When agreed, tap Accept Scope Change to update your baseline agreement.
           </Text>
         </View>
       </ScrollView>
@@ -604,6 +640,23 @@ const styles = StyleSheet.create({
   actionsContainer: {
     gap: 12,
     marginTop: spacing.xs,
+  },
+  acceptButton: {
+    backgroundColor: '#15803D',
+    borderRadius: 12,
+    paddingVertical: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  acceptButtonPressed: {
+    backgroundColor: '#166534',
+  },
+  acceptButtonText: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#FFFFFF',
   },
   saveButton: {
     backgroundColor: colors.primary,

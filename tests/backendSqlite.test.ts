@@ -119,7 +119,7 @@ const never = new AbortController().signal;
       const [backend, concurrent] = await Promise.all([initializeBackendAsync(), initializeBackendAsync()]);
       expect(concurrent).toBe(backend);
       expect((await backend.services.briefCraft.extractBrief('Build a contact form.')).requirements).toEqual([
-        { id: 'REQ-01', title: 'Contact form', description: '', category: 'deliverable' },
+        { id: 'REQ-01', title: 'Contact form', description: 'Contact form', category: 'deliverable' },
       ]);
       expect((await projects.list()).map(project => project.id)).toEqual(['existing-project']);
 
@@ -336,15 +336,13 @@ const reviewedDraft = (projectId: string) => ({
 });
 
 (nodeSqlite ? describe : describe.skip)('database integrity guards', () => {
-  test.each(['agreement update', 'agreement delete', 'requirement update', 'requirement delete', 'request project', 'analysis agreement', 'proposal project', 'fractional days'])('rejects %s in SQL', async violation => {
+  test.each(['agreement update', 'requirement update', 'request project', 'analysis agreement', 'proposal project', 'fractional days'])('rejects %s in SQL', async violation => {
     const { db, data } = await realBackend(engine('{}'));
     const other = await data.createProject('Other');
     const otherAgreement = await data.confirmScope(other.id, reviewedDraft(other.id));
     const statements: Record<string, [string, unknown[]]> = {
       'agreement update': ["UPDATE agreements SET title = 'changed' WHERE id = ?", ['agmt_demo_v1_01']],
-      'agreement delete': ['DELETE FROM agreements WHERE id = ?', [otherAgreement.id]],
       'requirement update': ["UPDATE requirements SET title = 'changed' WHERE agreement_id = ?", ['agmt_demo_v1_01']],
-      'requirement delete': ['DELETE FROM requirements WHERE agreement_id = ?', ['agmt_demo_v1_01']],
       'request project': ['UPDATE client_requests SET project_id = ? WHERE id = ?', [other.id, 'req_demo_request_01']],
       'analysis agreement': ['UPDATE scopeguard_analyses SET agreement_id = ? WHERE id = ?', [otherAgreement.id, 'ana_demo_analysis_01']],
       'proposal project': ['UPDATE change_proposals SET project_id = ? WHERE id = ?', [other.id, 'prop_demo_proposal_01']],
@@ -352,6 +350,25 @@ const reviewedDraft = (projectId: string) => ({
     };
     const [sql, params] = statements[violation];
     await expect(db.runAsync(sql, params as never)).rejects.toThrow();
+  });
+
+  test('client approval, request status and deletion are allowed while terms stay immutable', async () => {
+    const { db } = await realBackend(engine('{}'));
+    const agreements = new AgreementRepository(db);
+    await agreements.recordClientApproval('agmt_demo_v1_01', 'Sarah');
+    expect(await agreements.getById('agmt_demo_v1_01')).toMatchObject({ clientSignatoryName: 'Sarah', title: 'Website Design and Build Agreement v1' });
+    await expect(db.runAsync("UPDATE agreements SET budget_amount = 1 WHERE id = ?", ['agmt_demo_v1_01'])).rejects.toThrow();
+
+    const requests = new ScopeGuardRepository(db);
+    await requests.updateRequestStatus('req_demo_request_01', 'accepted', '2026-10-10T00:00:00.000Z');
+    expect(await requests.getRequestById('req_demo_request_01')).toMatchObject({ status: 'accepted', acceptedAt: '2026-10-10T00:00:00.000Z' });
+    await expect(db.runAsync("UPDATE client_requests SET raw_text = 'changed' WHERE id = ?", ['req_demo_request_01'])).rejects.toThrow();
+    await expect(db.runAsync("UPDATE scopeguard_analyses SET summary = 'changed' WHERE id = ?", ['ana_demo_analysis_01'])).rejects.toThrow();
+
+    // The Settings reset clears and reseeds in one step.
+    expect(await seedDemoDataAsync(db, true)).toBe(true);
+    expect((await new ProjectRepository(db).list()).map(project => project.id)).toEqual(['proj_demo_website_01']);
+    expect((await agreements.getById('agmt_demo_v1_01'))?.clientSignatoryName ?? null).toBeNull();
   });
 
   test('new mixed findings store clarification as the aggregate classification', async () => {
@@ -399,7 +416,10 @@ const reviewedDraft = (projectId: string) => ({
       [a.id, a.projectId, 1, a.title, 15000.25, a.budgetCurrency, a.budgetNotes, a.durationDays, a.deadline, a.timelineNotes,
         a.revisionTerms, JSON.stringify(a.exclusions), JSON.stringify(a.missingInformation), a.taxTreatment, a.confirmedAt]);
     for (const r of a.requirements) await db.runAsync('INSERT INTO requirements VALUES (?, ?, ?, ?, ?)', [r.id, a.id, r.title, r.description, r.category]);
-    await new ScopeGuardRepository(db).createRequest(payload.requests[0]);
+    // The legacy schema has no request status columns, so the request is written with its old shape.
+    const q = payload.requests[0];
+    await db.runAsync('INSERT INTO client_requests (id, project_id, agreement_id, raw_text, created_at) VALUES (?, ?, ?, ?, ?)',
+      [q.id, q.projectId, q.agreementId, q.rawText, q.createdAt]);
     await new ScopeGuardRepository(db).createAnalysis(payload.analyses[0]);
     // A historical fractional day value must survive upgrading; new values must be whole days.
     await db.runAsync(`INSERT INTO change_proposals (id, project_id, analysis_id, selected_items_json,
@@ -411,7 +431,7 @@ const reviewedDraft = (projectId: string) => ({
     await migrateAsync(db); await migrateAsync(db);
     expect((await new AgreementRepository(db).getById(a.id))?.budgetAmount).toBe(15000.25);
     expect(await new ProposalRepository(db).getById('legacy-proposal')).toMatchObject({ freelancerFeeEstimate: 7000.5, freelancerDaysEstimate: 1.5, draftMessage: 'Keep this' });
-    expect(await db.getAllAsync('SELECT version FROM schema_migrations ORDER BY version')).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }]);
+    expect(await db.getAllAsync('SELECT version FROM schema_migrations ORDER BY version')).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }]);
   });
 
   test.each(['integrity', 'draft'])('upgrades the %s branch migration 3 without losing records', async branch => {
@@ -429,7 +449,7 @@ const reviewedDraft = (projectId: string) => ({
       expect((await db.getAllAsync<{ name: string }>('PRAGMA table_info(projects)')).some(column => column.name === 'draft_scope_json')).toBe(true);
       expect((await db.getAllAsync<{ name: string }>('PRAGMA table_info(agreements)')).some(column => column.name === 'sealed')).toBe(true);
       expect(await db.getFirstAsync("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name = 'agreements_no_update'")).not.toBeNull();
-      expect(await db.getAllAsync('SELECT version FROM schema_migrations ORDER BY version')).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }]);
+      expect(await db.getAllAsync('SELECT version FROM schema_migrations ORDER BY version')).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }, { version: 5 }]);
     } finally { await db.closeAsync(); }
   });
 

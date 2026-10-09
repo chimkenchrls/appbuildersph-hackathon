@@ -6,12 +6,23 @@ import { ScopeGuardRepository } from './repositories/scopeGuardRepository';
 import { ProposalRepository } from './repositories/proposalRepository';
 import { SettingsRepository } from './repositories/settingsRepository';
 
-export async function seedDemoDataAsync(db: SQLiteDatabase): Promise<boolean> {
+/**
+ * Seeds the demo project into an empty workspace. With `force`, the workspace is cleared first
+ * (the Settings reset); clearing and seeding share one transaction, so a failure keeps the old data.
+ */
+export async function seedDemoDataAsync(db: SQLiteDatabase, force: boolean = false): Promise<boolean> {
   return transaction(db, async tx => {
     const projectRepo = new ProjectRepository(tx);
-    const existingProjects = await projectRepo.list();
 
-    if (existingProjects.length > 0) {
+    if (force) {
+      // Children first, so no foreign key is left dangling.
+      await tx.runAsync('DELETE FROM change_proposals;');
+      await tx.runAsync('DELETE FROM scopeguard_analyses;');
+      await tx.runAsync('DELETE FROM client_requests;');
+      await tx.runAsync('DELETE FROM requirements;');
+      await tx.runAsync('DELETE FROM agreements;');
+      await tx.runAsync('DELETE FROM projects;');
+    } else if ((await projectRepo.list()).length > 0) {
       return false; // Database already has data, do not duplicate
     }
 
@@ -92,6 +103,7 @@ export async function seedDemoDataAsync(db: SQLiteDatabase): Promise<boolean> {
       agreementId,
       rawText: 'Could you also add a login portal for our clients and an appointment booking calendar?',
       createdAt: now,
+      status: 'stored',
     });
 
     // 4. Create ScopeGuard Analysis

@@ -77,11 +77,12 @@ test('a proposal from another project cannot be loaded by changing route identif
 test('the new scope screen keeps absent terms unspecified and failed confirmation visible', async () => {
   const confirm = jest.fn(async (_draft: ScopeDraft) => { throw new Error('Database unavailable'); });
   await render(<ScopeDraftScreen project={project} draft={draft} onBack={jest.fn()} onConfirmScope={confirm} onSaveDraft={jest.fn()} />);
-  expect(screen.getAllByText('Not specified').length).toBeGreaterThanOrEqual(3);
+  expect(screen.getAllByText('To be agreed').length).toBeGreaterThanOrEqual(3);
   expect(screen.queryByText('₱15,000')).toBeNull();
   await fireEvent.press(screen.getByLabelText('Release and confirm scope'));
   await waitFor(() => expect(confirm).toHaveBeenCalled());
-  expect(confirm.mock.calls[0][0]).toMatchObject({ budgetAmount: null, durationDays: null, revisionTerms: null, missingInformation: ['Confirm the date'] });
+  expect(confirm.mock.calls[0][0]).toMatchObject({ budgetAmount: null, durationDays: null, revisionTerms: null,
+    missingInformation: ['Agreed budget is not specified.', 'Delivery deadline or timeline is not specified.', 'Revision allowance is not specified.'] });
   expect(screen.getByText(/Your edits are still here/)).toBeTruthy();
 });
 

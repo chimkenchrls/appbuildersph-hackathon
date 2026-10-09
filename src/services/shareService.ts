@@ -1,6 +1,7 @@
 import { Share } from 'react-native';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
+import * as FileSystem from 'expo-file-system/legacy';
 import type { ChangeProposal, Agreement, ContractOptions } from '@/types/domain';
 import { ContractGeneratorService } from './contractGeneratorService';
 
@@ -95,11 +96,30 @@ Confirmed Date: ${new Date(agreement.confirmedAt).toLocaleDateString()}
       const html = ContractGeneratorService.generateContractHtml(agreement, options);
       const isSharingAvailable = await Sharing.isAvailableAsync();
 
+      const rawClient = (options?.clientName || 'Client').trim();
+      const sanitizedClient = rawClient.replace(/[/\\?%*:|"<>]/g, '_').trim() || 'Client';
+      const pdfFileName = `Contract Form ${sanitizedClient}.pdf`;
+
       if (isSharingAvailable) {
         const { uri } = await Print.printToFileAsync({ html });
-        await Sharing.shareAsync(uri, {
+        let targetUri = uri;
+
+        try {
+          if (FileSystem.cacheDirectory) {
+            const newUri = `${FileSystem.cacheDirectory}${pdfFileName}`;
+            await FileSystem.copyAsync({
+              from: uri,
+              to: newUri,
+            });
+            targetUri = newUri;
+          }
+        } catch {
+          // Fallback to original uri if platform filesystem copy encounters an error
+        }
+
+        await Sharing.shareAsync(targetUri, {
           mimeType: 'application/pdf',
-          dialogTitle: `Share Agreement PDF - ${agreement.title}`,
+          dialogTitle: `Contract Form ${sanitizedClient}`,
           UTI: 'com.adobe.pdf',
         });
         return true;

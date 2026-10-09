@@ -64,7 +64,6 @@ export function ScopeReviewScreen({
 
   const formatEvidenceIds = (
     findings: Finding[],
-
   ): string[] => {
     const ids = Array.from(
       new Set(findings.flatMap((f) => f.evidenceRequirementIds || [])),

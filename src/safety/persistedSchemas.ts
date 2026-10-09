@@ -27,13 +27,18 @@ export const AgreementSchema = z.object({
   revisionTerms: text(limits.item).nullable(), exclusions: strings, missingInformation: strings,
   taxTreatment: z.enum(['net_of_withholding', 'inclusive', 'subject_to_2307', 'none_specified']).default('net_of_withholding'),
   confirmedAt: date,
+  // Recorded after confirmation; the agreement's terms above stay immutable.
+  clientApprovedAt: date.nullable().optional(),
+  clientSignatoryName: text(limits.item).nullable().optional(),
+  clientSignatureData: z.string().max(2000000).nullable().optional(),
 }).strict();
 // Same field limits as confirmed agreements, while allowing an unfinished empty draft.
-export const PersistedDraftSchema = AgreementSchema.omit({ id: true, projectId: true, versionNumber: true, confirmedAt: true }).extend({
+export const PersistedDraftSchema = AgreementSchema.omit({ id: true, projectId: true, versionNumber: true, confirmedAt: true, clientApprovedAt: true, clientSignatoryName: true, clientSignatureData: true }).extend({
   requirements: z.array(AgreementSchema.shape.requirements.element).max(limits.items + 1)
     .refine(rows => new Set(rows.map(row => row.id)).size === rows.length),
 });
-export const RequestSchema = z.object({ id, projectId: id, agreementId: id, rawText: nonempty(limits.request), createdAt: date }).strict();
+export const RequestSchema = z.object({ id, projectId: id, agreementId: id, rawText: nonempty(limits.request), createdAt: date,
+  status: z.enum(['stored', 'analyzed', 'accepted']).optional(), acceptedAt: date.nullable().optional() }).strict();
 export const AnalysisSchema = z.object({
   id, requestId: id, agreementId: id, classification: ClassificationSchema, summary: text(limits.message),
   findings: z.array(z.object({ item: nonempty(limits.item), classification: ClassificationSchema,
@@ -45,7 +50,7 @@ export const ProposalSchema = z.object({
   id, projectId: id, analysisId: id, selectedItems: strings.min(1), freelancerFeeEstimate: amount,
   // Read old records without rounding them. New writes/imports impose whole days.
   freelancerDaysEstimate: amount, currency, draftMessage: text(limits.message),
-  status: z.enum(['draft', 'copied', 'sent']), createdAt: date, updatedAt: date,
+  status: z.enum(['draft', 'copied', 'sent', 'accepted']), createdAt: date, updatedAt: date,
 }).strict();
 
 export function stored<T>(schema: z.ZodType<T>, value: unknown): T {

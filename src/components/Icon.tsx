@@ -34,7 +34,10 @@ export type IconName =
   | 'scan-text'
   | 'clipboard'
   | 'copy'
-  | 'printer';
+  | 'printer'
+  | 'trash'
+  | 'user'
+  | 'x';
 
 interface IconProps {
   name: IconName;
@@ -44,6 +47,10 @@ interface IconProps {
 
 export function AppIcon({ name, size = 20, color = colors.textPrimary }: IconProps) {
   switch (name) {
+    case 'x':
+      return <Lucide name="x" size={size} color={color} />;
+    case 'user':
+      return <Lucide name="user" size={size} color={color} />;
     case 'projects':
       return <Lucide name="layers" size={size} color={color} />;
     case 'agreements':
@@ -62,6 +69,8 @@ export function AppIcon({ name, size = 20, color = colors.textPrimary }: IconPro
       return <Lucide name="copy" size={size} color={color} />;
     case 'printer':
       return <Lucide name="printer" size={size} color={color} />;
+    case 'trash':
+      return <Lucide name="trash-2" size={size} color={color} />;
     case 'image':
       return <Lucide name="image" size={size} color={color} />;
     case 'send':

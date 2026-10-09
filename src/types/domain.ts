@@ -2,7 +2,7 @@ export type Classification = 'included' | 'potential_additional' | 'needs_clarif
 
 export type RequirementCategory = 'deliverable' | 'term' | 'exclusion';
 
-export type ProposalStatus = 'draft' | 'copied' | 'sent';
+export type ProposalStatus = 'draft' | 'copied' | 'sent' | 'accepted';
 
 export type TaxTreatment =
   | 'net_of_withholding'
@@ -41,6 +41,8 @@ export interface ScopeDraft {
   exclusions: string[];
   missingInformation: string[];
   taxTreatment?: TaxTreatment;
+  sourceConversation?: string;
+  extractedWithAi?: boolean;
 }
 
 export interface Project {
@@ -70,7 +72,12 @@ export interface Agreement {
   missingInformation: string[];
   taxTreatment?: TaxTreatment;
   confirmedAt: string;
+  clientApprovedAt?: string | null;
+  clientSignatoryName?: string | null;
+  clientSignatureData?: string | null;
 }
+
+export type ClientRequestStatus = 'stored' | 'analyzed' | 'accepted';
 
 export interface ClientRequest {
   id: string;
@@ -78,6 +85,8 @@ export interface ClientRequest {
   agreementId: string;
   rawText: string;
   createdAt: string;
+  status?: ClientRequestStatus;
+  acceptedAt?: string | null;
 }
 
 export interface Finding {

@@ -44,12 +44,12 @@ export function ScopeDraftScreen({
   const [conversationExpanded, setConversationExpanded] = useState(false);
 
   // Editable draft states
-  const [title, setTitle] = useState(draft.title || project.title);
+  const [title, setTitle] = useState(draft.title || project.title || 'Project Scope');
   const [budgetAmount, setBudgetAmount] = useState<number | null>(
-    draft.budgetAmount,
+    draft.budgetAmount != null ? draft.budgetAmount : null,
   );
-  const [durationDays] = useState<number | null>(
-    draft.durationDays,
+  const [durationDays, setDurationDays] = useState<number | null>(
+    draft.durationDays != null ? draft.durationDays : null,
   );
   const [timelineNotes, setTimelineNotes] = useState(
     draft.timelineNotes || '',
@@ -61,7 +61,12 @@ export function ScopeDraftScreen({
   const [taxTreatment, setTaxTreatment] = useState<TaxTreatment>(
     draft.taxTreatment || 'none_specified',
   );
-  const [requirements, setRequirements] = useState<Requirement[]>(draft.requirements);
+  const [requirements, setRequirements] = useState<Requirement[]>(() => {
+    if (draft.requirements && draft.requirements.length > 0) {
+      return draft.requirements;
+    }
+    return [];
+  });
 
   // Modal states for interactive editing
   const [editingRequirement, setEditingRequirement] = useState<Requirement | null>(null);
@@ -85,26 +90,28 @@ export function ScopeDraftScreen({
     if (budgetAmount != null) {
       return `₱${budgetAmount.toLocaleString('en-US')}`;
     }
-    return 'Not specified';
+    return 'To be agreed';
   }, [budgetAmount]);
 
   const displayTimeline = useMemo(() => {
-    if (timelineNotes && timelineNotes.toLowerCase().includes('2 weeks')) {
-      return '2 weeks';
+    if (timelineNotes && timelineNotes.trim()) {
+      return timelineNotes;
     }
-    if (durationDays === 14) return '2 weeks';
-    if (durationDays) return `${durationDays} days`;
-    return timelineNotes || 'Not specified';
+    if (durationDays != null) {
+      if (durationDays % 7 === 0 && durationDays >= 7) {
+        const weeks = durationDays / 7;
+        return `${weeks} week${weeks === 1 ? '' : 's'}`;
+      }
+      return `${durationDays} day${durationDays === 1 ? '' : 's'}`;
+    }
+    return 'To be agreed';
   }, [durationDays, timelineNotes]);
 
   const displayRevisions = useMemo(() => {
-    if (revisionTerms && revisionTerms.toLowerCase().includes('two rounds')) {
-      return '2 rounds';
+    if (revisionTerms && revisionTerms.trim()) {
+      return revisionTerms;
     }
-    if (revisionTerms && revisionTerms.toLowerCase().includes('2 rounds')) {
-      return '2 rounds';
-    }
-    return revisionTerms || 'Not specified';
+    return 'To be agreed';
   }, [revisionTerms]);
 
   const displayTaxTreatment = useMemo(() => {
@@ -121,7 +128,15 @@ export function ScopeDraftScreen({
     }
   }, [taxTreatment]);
 
-  const sourceConversationText = sourceConversation || 'No source conversation was saved for this draft.';
+  const sourceConversationText = useMemo(() => {
+    if (draft.sourceConversation && draft.sourceConversation.trim()) {
+      return draft.sourceConversation.trim();
+    }
+    if (project.description && project.description.trim()) {
+      return project.description.trim();
+    }
+    return 'No conversation text recorded for this draft.';
+  }, [draft.sourceConversation, project.description]);
 
   // Handlers for single requirement editing
   const handleOpenEditRequirement = (req: Requirement) => {
@@ -183,7 +198,15 @@ export function ScopeDraftScreen({
 
   const handleSaveTimeline = () => {
     if (tempTimelineInput.trim()) {
-      setTimelineNotes(tempTimelineInput.trim());
+      const trimmed = tempTimelineInput.trim();
+      setTimelineNotes(trimmed);
+      const numMatch = trimmed.match(/(\d+)\s*days?/i);
+      const weekMatch = trimmed.match(/(\d+)\s*weeks?/i);
+      if (numMatch && numMatch[1]) {
+        setDurationDays(parseInt(numMatch[1], 10));
+      } else if (weekMatch && weekMatch[1]) {
+        setDurationDays(parseInt(weekMatch[1], 10) * 7);
+      }
     }
     setTermModalVisible(null);
   };
@@ -228,16 +251,22 @@ export function ScopeDraftScreen({
 
   const currentDraft: ScopeDraft = {
       ...draft,
-      title: title.trim() || draft.title,
-      budgetAmount,
-      budgetCurrency: draft.budgetCurrency,
-      budgetNotes: draft.budgetNotes,
-      durationDays,
+      title: title.trim() || draft.title || project.title,
+      budgetAmount: budgetAmount != null ? budgetAmount : null,
+      budgetCurrency: draft.budgetCurrency || 'PHP',
+      budgetNotes:
+        draft.budgetNotes ||
+        (budgetAmount != null ? `Fixed price: ₱${budgetAmount.toLocaleString('en-US')}` : null),
+      durationDays: durationDays != null ? durationDays : null,
       deadline: deadline || null,
-      timelineNotes: timelineNotes || null,
+      timelineNotes: timelineNotes || (durationDays ? `${durationDays} days turnaround` : null),
       revisionTerms: revisionTerms || null,
       exclusions: draft.exclusions || [],
-      missingInformation: draft.missingInformation,
+      missingInformation: [
+        ...(budgetAmount == null ? ['Agreed budget is not specified.'] : []),
+        ...(!deadline && !durationDays ? ['Delivery deadline or timeline is not specified.'] : []),
+        ...(!revisionTerms ? ['Revision allowance is not specified.'] : []),
+      ],
       taxTreatment,
       requirements,
     };
@@ -271,7 +300,7 @@ export function ScopeDraftScreen({
     <View style={styles.container}>
       {/* Top Header matching exact mockup */}
       <HeaderBar
-        title={project.title || 'Harbor Studio'}
+        title={project.title || 'Project Scope'}
         subtitle={headerSubtitle}
         showBack={true}
         onBack={guardedBack}

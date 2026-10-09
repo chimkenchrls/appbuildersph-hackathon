@@ -8,7 +8,7 @@ export function getDatabaseAsync(): Promise<SQLite.SQLiteDatabase> {
 }
 
 async function open() {
-  const db = await SQLite.openDatabaseAsync('saklaw.db');
+  const db = await SQLite.openDatabaseAsync('owlset.db');
   try {
     await db.execAsync('PRAGMA foreign_keys = ON; PRAGMA journal_mode = WAL;');
     return db;

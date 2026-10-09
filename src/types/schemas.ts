@@ -21,27 +21,31 @@ export const ScopeDraftSchema = z.object({
   missingInformation: z.array(z.string()).default([]),
   taxTreatment: z
     .enum(['net_of_withholding', 'inclusive', 'subject_to_2307', 'none_specified'])
-    .default('net_of_withholding'),
+    .default('none_specified'),
+  sourceConversation: z.string().optional(),
+  extractedWithAi: z.boolean().optional(),
 });
 
 export const BriefCraftRawOutputSchema = z.object({
-  title: z.string().min(1),
-  deliverables: z.array(
-    z.object({
-      title: z.string().min(1),
-      description: z.string().default(''),
-    }),
-  ),
+  title: z.string().min(1).default('Project Scope'),
+  deliverables: z
+    .array(
+      z.object({
+        title: z.string().min(1),
+        description: z.string().default(''),
+      }),
+    )
+    .default([]),
   budget: z
     .object({
-      amount: z.number().nullable().default(null),
+      amount: z.coerce.number().nullable().default(null),
       currency: z.string().nullable().default('PHP'),
       notes: z.string().nullable().default(null),
     })
     .default({ amount: null, currency: 'PHP', notes: null }),
   timeline: z
     .object({
-      duration_days: z.number().nullable().default(null),
+      duration_days: z.coerce.number().nullable().default(null),
       deadline: z.string().nullable().default(null),
       notes: z.string().nullable().default(null),
     })
@@ -50,9 +54,18 @@ export const BriefCraftRawOutputSchema = z.object({
   exclusions: z.array(z.string()).default([]),
   missing_information: z.array(z.string()).default([]),
   tax_treatment: z
-    .enum(['net_of_withholding', 'inclusive', 'subject_to_2307', 'none_specified'])
+    .string()
     .nullable()
-    .default(null),
+    .default(null)
+    .transform((val) => {
+      if (!val) return null;
+      const lower = val.toLowerCase();
+      if (lower.includes('net')) return 'net_of_withholding';
+      if (lower.includes('inclusive')) return 'inclusive';
+      if (lower.includes('2307')) return 'subject_to_2307';
+      if (lower.includes('none')) return 'none_specified';
+      return null;
+    }),
 });
 
 export const FindingSchema = z.object({
