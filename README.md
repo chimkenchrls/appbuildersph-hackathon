@@ -127,6 +127,22 @@ npm run build:web
 
 ---
 
+## Web deployment on Vercel
+
+The web target is OwlSet's landing page. The root `vercel.json` configures a locked
+npm install, `npm run build:web`, the `dist` output directory, and a routing fallback
+for direct links. Fonts and mascot assets are included in the export.
+
+1. Commit and push `vercel.json` to GitHub.
+2. In Vercel, choose **Add New → Project** and import this repository.
+3. Use the repository root, the **Other** framework preset, and the `main` branch.
+   The configuration file supplies the install command, build command, and output directory.
+4. Deploy and verify the landing page, Kwagi interactions, demo controls, and mobile menu.
+
+The landing page needs no environment variables or running AI server. Keep local
+generation credentials out of Vercel. Publishing the website does not deliver the
+Android application; standalone APK builds are separate.
+
 ## Standalone Android APK builds
 
 Standalone Android APKs are configured using EAS Build profiles:
