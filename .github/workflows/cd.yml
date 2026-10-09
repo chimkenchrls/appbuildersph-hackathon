@@ -1,0 +1,240 @@
+name: CD
+
+# Publishes the web landing page to Vercel, but only for a commit that CI has just
+# verified on main. Setup, recovery and rollback are in docs/DEPLOYMENT.md.
+#
+# workflow_run only fires for the copy of this file on the default branch, and it runs
+# with that branch's workflow definition whatever commit CI tested.
+on:
+  workflow_run:
+    workflows: [CI]
+    types: [completed]
+    branches: [main]
+
+permissions:
+  contents: read
+
+# One production publication at a time. A running deployment is never cancelled; if
+# several are waiting, GitHub keeps only the newest, which is the one worth publishing.
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+env:
+  # Build tooling, pinned exactly. Update deliberately and re-run the checks in docs/DEPLOYMENT.md.
+  VERCEL_CLI_VERSION: 63.1.0
+  PLAYWRIGHT_VERSION: 1.64.0
+
+jobs:
+  deploy:
+    name: Deploy to production
+    # The gate. Unless every condition holds the job is skipped, and a skipped job is never
+    # given the production environment or its secrets:
+    #   - CI finished successfully (not failed, cancelled or skipped),
+    #   - CI was started by a push (not a pull request or a manual run),
+    #   - the push was to main,
+    #   - the commit lives in this repository (not a fork).
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    environment:
+      name: production
+      url: ${{ vars.PRODUCTION_URL }}
+    env:
+      # Event values reach the shell only as environment variables, never as script text.
+      TESTED_SHA: ${{ github.event.workflow_run.head_sha }}
+      CI_RUN_ID: ${{ github.event.workflow_run.id }}
+      CI_RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
+      CI_RUN_URL: ${{ github.event.workflow_run.html_url }}
+      CI_EVENT: ${{ github.event.workflow_run.event }}
+      CI_CONCLUSION: ${{ github.event.workflow_run.conclusion }}
+      CI_HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+      CI_HEAD_REPOSITORY: ${{ github.event.workflow_run.head_repository.full_name }}
+      THIS_REPOSITORY: ${{ github.repository }}
+      PRODUCTION_URL: ${{ vars.PRODUCTION_URL }}
+    steps:
+      # Runs before any source is checked out or executed.
+      - name: Validate the triggering run and configuration
+        env:
+          HAS_VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN != '' }}
+          HAS_VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID != '' }}
+          HAS_VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID != '' }}
+        run: |
+          set -euo pipefail
+          fail() { echo "::error::$1"; exit 1; }
+
+          # The job condition already enforces these; repeating them here keeps the
+          # deployment safe if that condition is ever edited carelessly.
+          [ "$CI_CONCLUSION" = "success" ] || fail "CI did not succeed (conclusion: $CI_CONCLUSION)."
+          [ "$CI_EVENT" = "push" ] || fail "CI was not started by a push (event: $CI_EVENT)."
+          [ "$CI_HEAD_BRANCH" = "main" ] || fail "CI did not run on main (branch: $CI_HEAD_BRANCH)."
+          [ "$CI_HEAD_REPOSITORY" = "$THIS_REPOSITORY" ] || fail "The commit is not from this repository."
+          [[ "$TESTED_SHA" =~ ^[0-9a-f]{40}$ ]] || fail "The tested commit is not a full SHA."
+
+          missing=""
+          [ "$HAS_VERCEL_TOKEN" = "true" ] || missing="$missing VERCEL_TOKEN"
+          [ "$HAS_VERCEL_ORG_ID" = "true" ] || missing="$missing VERCEL_ORG_ID"
+          [ "$HAS_VERCEL_PROJECT_ID" = "true" ] || missing="$missing VERCEL_PROJECT_ID"
+          [ -z "$missing" ] || fail "Missing secrets in the production environment:$missing. See docs/DEPLOYMENT.md."
+          [[ "$PRODUCTION_URL" =~ ^https://[A-Za-z0-9.-]+$ ]] || fail "Set the production environment variable PRODUCTION_URL to the site's https origin, with no path. See docs/DEPLOYMENT.md."
+
+          {
+            echo "## Production deployment"
+            echo
+            echo "- Tested commit: \`$TESTED_SHA\`"
+            echo "- CI run: [#$CI_RUN_NUMBER]($CI_RUN_URL)"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Skip if main has moved on (before building)
+        id: fresh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current="$(gh api "repos/$THIS_REPOSITORY/commits/main" --jq .sha)"
+          [[ "$current" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Could not read the head of main."; exit 1; }
+          if [ "$current" != "$TESTED_SHA" ]; then
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipped: main is now at $current, so this run's commit is out of date."
+            echo "- Result: **skipped**. main has moved to \`$current\`; its own CI run will deploy it." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Check out the tested commit
+        if: steps.fresh.outputs.stale == 'false'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          persist-credentials: false
+
+      - name: Confirm the checkout is the tested commit
+        if: steps.fresh.outputs.stale == 'false'
+        run: |
+          set -euo pipefail
+          actual="$(git rev-parse HEAD)"
+          [ "$actual" = "$TESTED_SHA" ] || { echo "::error::Checked out $actual, expected $TESTED_SHA."; exit 1; }
+
+      # Same Node major as CI, so the published build is the build CI verified.
+      - name: Set up Node.js
+        if: steps.fresh.outputs.stale == 'false'
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: npm
+
+      # Deployment tooling lives outside the project, so it never touches package.json.
+      - name: Install the Vercel CLI and the smoke-check browser
+        if: steps.fresh.outputs.stale == 'false'
+        run: |
+          set -euo pipefail
+          npm install --prefix "$RUNNER_TEMP/vercel-cli" --no-audit --no-fund "vercel@$VERCEL_CLI_VERSION"
+          echo "$RUNNER_TEMP/vercel-cli/node_modules/.bin" >> "$GITHUB_PATH"
+          npm install --prefix "$RUNNER_TEMP/smoke" --no-audit --no-fund "playwright@$PLAYWRIGHT_VERSION"
+          "$RUNNER_TEMP/smoke/node_modules/.bin/playwright" install --with-deps chromium
+
+      - name: Pull the Vercel project settings
+        if: steps.fresh.outputs.stale == 'false'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          vercel pull --yes --environment=production
+
+          # The landing page needs no runtime configuration. Refuse to build if the Vercel
+          # project carries app or AI variables, which would be embedded in the public bundle.
+          pulled=".vercel/.env.production.local"
+          if [ -f "$pulled" ]; then
+            unexpected="$(grep -oE '^(EXPO_PUBLIC_[A-Z0-9_]*|GEMINI[A-Z0-9_]*|GOOGLE_API[A-Z0-9_]*|LM_?STUDIO[A-Z0-9_]*)' "$pulled" || true)"
+            if [ -n "$unexpected" ]; then
+              echo "::error::The Vercel project defines variables the web build must not receive: $(echo "$unexpected" | tr '\n' ' '). Remove them in Vercel."
+              exit 1
+            fi
+          fi
+
+      # vercel build runs the install and build commands from vercel.json (npm ci, then
+      # npm run build:web) and writes .vercel/output. It gets no deployment credentials,
+      # so neither the project's code nor its dependencies can read the token.
+      - name: Build the tested commit
+        if: steps.fresh.outputs.stale == 'false'
+        run: |
+          set -euo pipefail
+          vercel build --prod
+
+          out=".vercel/output/static"
+          for file in index.html mascots/kwagi-directions.webp mascots/kwagi-reactions.webp fonts/Geist-Variable.woff2 fonts/GeistMono-Variable.woff2 favicon.png; do
+            [ -s "$out/$file" ] || { echo "::error::The build output is missing $file."; exit 1; }
+          done
+          grep -q '"buildCommand": "npm run build:web"' .vercel/output/builds.json || { echo "::error::vercel build did not use the Expo web export from vercel.json."; exit 1; }
+          grep -q '/_expo/static/js/web/' "$out/index.html" || { echo "::error::index.html is not the Expo web export."; exit 1; }
+
+      - name: Skip if main has moved on (before publishing)
+        id: still_fresh
+        if: steps.fresh.outputs.stale == 'false'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          current="$(gh api "repos/$THIS_REPOSITORY/commits/main" --jq .sha)"
+          [[ "$current" =~ ^[0-9a-f]{40}$ ]] || { echo "::error::Could not read the head of main."; exit 1; }
+          if [ "$current" != "$TESTED_SHA" ]; then
+            echo "stale=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Skipped: main moved to $current while this run was building."
+            echo "- Result: **skipped**. main moved to \`$current\` during the build; its own CI run will deploy it." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "stale=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish to Vercel production
+        id: publish
+        if: steps.still_fresh.outputs.stale == 'false'
+        env:
+          VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
+        run: |
+          set -euo pipefail
+          # The CLI prints progress on stderr and only the deployment URL on stdout.
+          url="$(vercel deploy --prebuilt --prod)"
+          [[ "$url" =~ ^https://[a-z0-9.-]+\.vercel\.app$ ]] || { echo "::error::Unexpected output from vercel deploy."; exit 1; }
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          {
+            echo "- Deployment: $url"
+            echo "- Production URL checked: $PRODUCTION_URL"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      # Checks the production domain, not the deployment URL: deployment URLs can sit behind
+      # Vercel's login. --expect-index makes the checks wait until the domain serves this
+      # exact build. The retries are bounded, and a failure fails the job without redeploying.
+      - name: Smoke-check the production site
+        if: steps.still_fresh.outputs.stale == 'false'
+        env:
+          SMOKE_MODULES: ${{ runner.temp }}/smoke
+        run: |
+          set -euo pipefail
+          node scripts/smoke-web.mjs \
+            --url "$PRODUCTION_URL" \
+            --expect-index .vercel/output/static/index.html \
+            --attempts 12 --delay 5000 \
+            --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Record the result
+        if: always() && steps.fresh.outputs.stale == 'false' && steps.still_fresh.outputs.stale != 'true'
+        env:
+          JOB_STATUS: ${{ job.status }}
+          DEPLOYMENT_URL: ${{ steps.publish.outputs.url }}
+        run: |
+          set -euo pipefail
+          if [ "$JOB_STATUS" = "success" ]; then
+            echo "- Result: **deployed and verified**." >> "$GITHUB_STEP_SUMMARY"
+          elif [ -n "$DEPLOYMENT_URL" ]; then
+            echo "- Result: **published, but verification failed**. The new deployment is live. Follow \"When a deployment fails\" in docs/DEPLOYMENT.md." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "- Result: **failed before publishing**. Production is unchanged." >> "$GITHUB_STEP_SUMMARY"
+          fi

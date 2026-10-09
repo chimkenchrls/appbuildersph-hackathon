@@ -37,7 +37,7 @@ OwlSet is an offline-first mobile workspace for freelance developers and designe
 
 ### Prerequisites
 
-* Node.js `>=22.13.0`
+* Node.js 22 (`>=22.13.0 <23`), the version CI and the web deployment build with
 * npm (lockfile committed)
 * (Optional for live AI inference) LM Studio running locally with a local model loaded and the local server started on port 1234.
 
@@ -129,15 +129,16 @@ npm run build:web
 
 ## Web deployment on Vercel
 
-The web target is OwlSet's landing page. The root `vercel.json` configures a locked
-npm install, `npm run build:web`, the `dist` output directory, and a routing fallback
-for direct links. Fonts and mascot assets are included in the export.
+The web target is OwlSet's landing page. It is published to Vercel by GitHub Actions, and only
+for a commit that CI has verified on `main`: `.github/workflows/cd.yml` rebuilds that commit,
+publishes it, and smoke-checks the live site. Vercel's own deployments from Git are switched
+off in `vercel.json`.
 
-1. Commit and push `vercel.json` to GitHub.
-2. In Vercel, choose **Add New → Project** and import this repository.
-3. Use the repository root, the **Other** framework preset, and the `main` branch.
-   The configuration file supplies the install command, build command, and output directory.
-4. Deploy and verify the landing page, Kwagi interactions, demo controls, and mobile menu.
+The root `vercel.json` configures a locked npm install, `npm run build:web`, the `dist` output
+directory, and a routing fallback for direct links. Fonts and mascot assets are included in the export.
+
+Setup, the required GitHub environment secrets, failure recovery and rollback are in
+[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 The landing page needs no environment variables or running AI server. Keep local
 generation credentials out of Vercel. Publishing the website does not deliver the
