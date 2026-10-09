@@ -32,7 +32,7 @@ export async function seedDemoDataAsync(db: SQLiteDatabase): Promise<boolean> {
   // 1. Create Project
   await projectRepo.create({
     id: projectId,
-    title: 'Acme Studios — 5-Page Website',
+    title: 'Acme Studios: 5-Page Website',
     clientName: 'Acme Studios (Sarah)',
     description: 'Corporate website design and development agreed via chat.',
   });
@@ -77,6 +77,7 @@ export async function seedDemoDataAsync(db: SQLiteDatabase): Promise<boolean> {
     missingInformation: [
       'Copywriting and high-resolution photo assets from client',
     ],
+    taxTreatment: 'net_of_withholding',
     confirmedAt: now,
   });
 

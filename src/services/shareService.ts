@@ -1,5 +1,6 @@
 import { Share } from 'react-native';
-import type { ChangeProposal, Agreement } from '@/types/domain';
+import type { ChangeProposal, Agreement, ContractOptions } from '@/types/domain';
+import { ContractGeneratorService } from './contractGeneratorService';
 
 export class ShareService {
   static async shareProposal(proposal: ChangeProposal, projectTitle: string): Promise<boolean> {
@@ -27,7 +28,7 @@ Timeline: ${daysText}
     try {
       const result = await Share.share({
         message,
-        title: `Scope Change Proposal — ${projectTitle}`,
+        title: `Scope Change Proposal: ${projectTitle}`,
       });
       return result.action === Share.sharedAction;
     } catch {
@@ -61,7 +62,21 @@ Confirmed Date: ${new Date(agreement.confirmedAt).toLocaleDateString()}
     try {
       const result = await Share.share({
         message,
-        title: `${agreement.title} — ${projectTitle}`,
+        title: `${agreement.title}: ${projectTitle}`,
+      });
+      return result.action === Share.sharedAction;
+    } catch {
+      return false;
+    }
+  }
+
+  static async shareContract(agreement: Agreement, options?: ContractOptions): Promise<boolean> {
+    const contractText = ContractGeneratorService.generateContractText(agreement, options);
+
+    try {
+      const result = await Share.share({
+        message: contractText,
+        title: `Contract: ${agreement.title}`,
       });
       return result.action === Share.sharedAction;
     } catch {

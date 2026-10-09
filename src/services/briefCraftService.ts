@@ -2,7 +2,7 @@ import type { LLMEngine } from '@/llm/contracts';
 import { parseAndValidateJson } from '@/llm/jsonParser';
 import { buildBriefCraftPrompt } from '@/llm/prompts/briefCraftPrompt';
 import { BriefCraftRawOutputSchema } from '@/types/schemas';
-import type { ScopeDraft, Requirement } from '@/types/domain';
+import type { ScopeDraft, Requirement, TaxTreatment } from '@/types/domain';
 
 export class BriefCraftService {
   constructor(private readonly engine: LLMEngine) {}
@@ -62,6 +62,7 @@ export class BriefCraftService {
       revisionTerms: parsed.revision_terms,
       exclusions: parsed.exclusions,
       missingInformation: parsed.missing_information,
+      taxTreatment: (parsed.tax_treatment as TaxTreatment) || 'net_of_withholding',
     };
   }
 }

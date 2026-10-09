@@ -4,6 +4,23 @@ export type RequirementCategory = 'deliverable' | 'term' | 'exclusion';
 
 export type ProposalStatus = 'draft' | 'copied' | 'sent';
 
+export type TaxTreatment =
+  | 'net_of_withholding'
+  | 'inclusive'
+  | 'subject_to_2307'
+  | 'none_specified';
+
+export interface ContractOptions {
+  freelancerName?: string;
+  freelancerTin?: string;
+  freelancerAddress?: string;
+  clientName?: string;
+  clientTin?: string;
+  clientAddress?: string;
+  taxTreatment?: TaxTreatment;
+  paymentMethod?: string;
+}
+
 export interface Requirement {
   id: string; // e.g. REQ-01
   title: string;
@@ -23,6 +40,7 @@ export interface ScopeDraft {
   revisionTerms: string | null;
   exclusions: string[];
   missingInformation: string[];
+  taxTreatment?: TaxTreatment;
 }
 
 export interface Project {
@@ -49,6 +67,7 @@ export interface Agreement {
   revisionTerms: string | null;
   exclusions: string[];
   missingInformation: string[];
+  taxTreatment?: TaxTreatment;
   confirmedAt: string;
 }
 

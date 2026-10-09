@@ -1,5 +1,6 @@
 import type { AgreementRepository } from '@/database/repositories/agreementRepository';
-import type { ScopeDraft, Agreement } from '@/types/domain';
+import type { ScopeDraft, Agreement, ContractOptions } from '@/types/domain';
+import { ContractGeneratorService } from './contractGeneratorService';
 
 export class KasunduanVaultService {
   constructor(private readonly agreementRepo: AgreementRepository) {}
@@ -18,7 +19,7 @@ export class KasunduanVaultService {
 
     const id = `agmt_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     const now = new Date().toISOString();
-    const title = customTitle?.trim() || `${draft.title} — Agreement v${nextVersion}`;
+    const title = customTitle?.trim() || `${draft.title}: Agreement v${nextVersion}`;
 
     const agreement: Agreement = {
       id,
@@ -35,10 +36,15 @@ export class KasunduanVaultService {
       revisionTerms: draft.revisionTerms,
       exclusions: draft.exclusions,
       missingInformation: draft.missingInformation,
+      taxTreatment: draft.taxTreatment || 'net_of_withholding',
       confirmedAt: now,
     };
 
     return this.agreementRepo.create(agreement);
+  }
+
+  generateContract(agreement: Agreement, options?: ContractOptions): string {
+    return ContractGeneratorService.generateContractText(agreement, options);
   }
 
   async getLatestAgreement(projectId: string): Promise<Agreement | null> {

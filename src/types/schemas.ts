@@ -19,6 +19,9 @@ export const ScopeDraftSchema = z.object({
   revisionTerms: z.string().nullable().default(null),
   exclusions: z.array(z.string()).default([]),
   missingInformation: z.array(z.string()).default([]),
+  taxTreatment: z
+    .enum(['net_of_withholding', 'inclusive', 'subject_to_2307', 'none_specified'])
+    .default('net_of_withholding'),
 });
 
 export const BriefCraftRawOutputSchema = z.object({
@@ -46,6 +49,10 @@ export const BriefCraftRawOutputSchema = z.object({
   revision_terms: z.string().nullable().default(null),
   exclusions: z.array(z.string()).default([]),
   missing_information: z.array(z.string()).default([]),
+  tax_treatment: z
+    .enum(['net_of_withholding', 'inclusive', 'subject_to_2307', 'none_specified'])
+    .nullable()
+    .default(null),
 });
 
 export const FindingSchema = z.object({

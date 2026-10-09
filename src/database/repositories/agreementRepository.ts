@@ -1,5 +1,5 @@
 import type { SQLiteDatabase } from 'expo-sqlite';
-import type { Agreement, Requirement } from '@/types/domain';
+import type { Agreement, Requirement, TaxTreatment } from '@/types/domain';
 
 interface AgreementRow {
   id: string;
@@ -15,6 +15,7 @@ interface AgreementRow {
   revision_terms: string | null;
   exclusions_json: string;
   missing_info_json: string;
+  tax_treatment?: string | null;
   confirmed_at: string;
 }
 
@@ -37,8 +38,8 @@ export class AgreementRepository {
           budget_amount, budget_currency, budget_notes,
           duration_days, deadline, timeline_notes,
           revision_terms, exclusions_json, missing_info_json,
-          confirmed_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+          tax_treatment, confirmed_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
         [
           agreement.id,
           agreement.projectId,
@@ -53,6 +54,7 @@ export class AgreementRepository {
           agreement.revisionTerms,
           JSON.stringify(agreement.exclusions),
           JSON.stringify(agreement.missingInformation),
+          agreement.taxTreatment || 'net_of_withholding',
           agreement.confirmedAt,
         ],
       );
@@ -138,6 +140,7 @@ export class AgreementRepository {
       revisionTerms: row.revision_terms,
       exclusions: JSON.parse(row.exclusions_json || '[]'),
       missingInformation: JSON.parse(row.missing_info_json || '[]'),
+      taxTreatment: (row.tax_treatment as TaxTreatment) || 'net_of_withholding',
       confirmedAt: row.confirmed_at,
     };
   }

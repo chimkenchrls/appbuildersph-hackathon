@@ -9,7 +9,8 @@ Rules:
 2. Extract terms including agreed budget, currency (default PHP if in Philippines or unstated), deadline, and revision allowances.
 3. If an item is not mentioned in the source text, set its value to null. Do not invent or assume details.
 4. List items that are clearly omitted or need clarification in missing_information.
-5. Return valid JSON only. Do not include markdown code fences or conversational text.
+5. If tax or withholding is mentioned, set tax_treatment to one of: "net_of_withholding", "inclusive", "subject_to_2307", or "none_specified". If not mentioned, set null.
+6. Return valid JSON only. Do not include markdown code fences or conversational text.
 
 Output JSON format:
 {
@@ -29,7 +30,8 @@ Output JSON format:
   },
   "revision_terms": "Two rounds of revisions",
   "exclusions": ["Items explicitly excluded or out of initial discussions"],
-  "missing_information": ["Critical items that were unstated, like hosting or assets"]
+  "missing_information": ["Critical items that were unstated, like hosting or assets"],
+  "tax_treatment": "net_of_withholding"
 }`;
 
   return [
