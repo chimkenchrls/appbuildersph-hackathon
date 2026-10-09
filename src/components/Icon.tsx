@@ -36,6 +36,7 @@ export type IconName =
   | 'copy'
   | 'printer'
   | 'trash'
+  | 'user'
   | 'x';
 
 interface IconProps {
@@ -48,6 +49,8 @@ export function AppIcon({ name, size = 20, color = colors.textPrimary }: IconPro
   switch (name) {
     case 'x':
       return <Feather name="x" size={size} color={color} />;
+    case 'user':
+      return <Feather name="user" size={size} color={color} />;
     case 'projects':
       return <Feather name="layers" size={size} color={color} />;
     case 'agreements':

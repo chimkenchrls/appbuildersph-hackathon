@@ -11,16 +11,24 @@ import {
 import { HeaderBar } from '@/components/HeaderBar';
 import { colors, radii, spacing, shadows } from '@/constants/theme';
 import { AppIcon } from '@/components/Icon';
+import { hapticSuccess } from '@/utils/haptics';
 import type { AppServices } from '@/services/bootstrapService';
 
 interface SettingsScreenProps {
   services: AppServices | null;
   onDataReset: () => Promise<void>;
+  onProfileUpdated?: (name: string, role: string) => void;
 }
 
-export function SettingsScreen({ services, onDataReset }: SettingsScreenProps) {
+export function SettingsScreen({ services, onDataReset, onProfileUpdated }: SettingsScreenProps) {
   const [resetting, setResetting] = useState(false);
   const [feedbackMessage, setFeedbackMessage] = useState<string | null>(null);
+
+  // Freelancer Profile State
+  const [freelancerName, setFreelancerName] = useState('');
+  const [freelancerRole, setFreelancerRole] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+  const [profileFeedback, setProfileFeedback] = useState<string | null>(null);
 
   // Local LLM State
   const [llmUrl, setLlmUrl] = useState('');
@@ -34,9 +42,14 @@ export function SettingsScreen({ services, onDataReset }: SettingsScreenProps) {
   } | null>(null);
 
   React.useEffect(() => {
-    async function loadLlmSettings() {
+    async function loadSettings() {
       if (!services) return;
       try {
+        const name = await services.repositories.settings.get('freelancer_name');
+        const role = await services.repositories.settings.get('freelancer_role');
+        if (name) setFreelancerName(name);
+        if (role) setFreelancerRole(role);
+
         const url = await services.repositories.settings.get('lm_studio_url');
         const model = await services.repositories.settings.get('lm_studio_model');
         const effectiveUrl = await services.llmEngine.getEffectiveUrl();
@@ -46,8 +59,30 @@ export function SettingsScreen({ services, onDataReset }: SettingsScreenProps) {
         // ignore
       }
     }
-    loadLlmSettings();
+    loadSettings();
   }, [services]);
+
+  const handleSaveProfile = async () => {
+    if (!services) return;
+    const trimmed = freelancerName.trim();
+    if (!trimmed) {
+      setProfileFeedback('Name cannot be empty.');
+      return;
+    }
+    setSavingProfile(true);
+    setProfileFeedback(null);
+    try {
+      await services.repositories.settings.set('freelancer_name', trimmed);
+      await services.repositories.settings.set('freelancer_role', freelancerRole.trim());
+      onProfileUpdated?.(trimmed, freelancerRole.trim());
+      setProfileFeedback('Freelancer profile updated for contracts and PDF exports.');
+      await hapticSuccess();
+    } catch (err) {
+      setProfileFeedback('Failed to update profile: ' + (err as Error).message);
+    } finally {
+      setSavingProfile(false);
+    }
+  };
 
   const handleTestConnection = async () => {
     if (!services) return;
@@ -131,6 +166,75 @@ export function SettingsScreen({ services, onDataReset }: SettingsScreenProps) {
           <Text style={styles.subhead}>
             Zero telemetry, local encrypted storage, and offline inference controls.
           </Text>
+        </View>
+
+        {/* Card 0: Freelancer Profile */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <Text style={styles.cardTitle}>Freelancer Identity</Text>
+            <View style={styles.badgeSuccess}>
+              <Text style={styles.badgeSuccessText}>Active</Text>
+            </View>
+          </View>
+          <Text style={styles.cardSubtitle}>
+            Your legal name and professional title stamped on generated Kasunduan contracts and PDF exports.
+          </Text>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Full Legal Name</Text>
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={styles.textInput}
+                value={freelancerName}
+                onChangeText={setFreelancerName}
+                placeholder="e.g. Maria Santos or Juan Dela Cruz"
+                placeholderTextColor={colors.placeholder}
+                autoCapitalize="words"
+                autoCorrect={false}
+              />
+            </View>
+          </View>
+
+          <View style={styles.inputGroup}>
+            <Text style={styles.inputLabel}>Professional Role or Title</Text>
+            <View style={styles.inputWrapper}>
+              <TextInput
+                style={styles.textInput}
+                value={freelancerRole}
+                onChangeText={setFreelancerRole}
+                placeholder="e.g. Full-Stack Developer or UI/UX Designer"
+                placeholderTextColor={colors.placeholder}
+                autoCapitalize="words"
+                autoCorrect={false}
+              />
+            </View>
+          </View>
+
+          {profileFeedback && (
+            <View style={styles.testResultSuccess}>
+              <AppIcon name="check" size={14} color={colors.successText} />
+              <Text style={styles.testResultSuccessText}>{profileFeedback}</Text>
+            </View>
+          )}
+
+          <Pressable
+            style={({ pressed }) => [
+              styles.saveLlmButton,
+              { marginTop: spacing.sm },
+              pressed && styles.saveLlmButtonPressed,
+              savingProfile && styles.buttonDisabled,
+            ]}
+            onPress={handleSaveProfile}
+            disabled={savingProfile}
+            accessibilityRole="button"
+            accessibilityLabel="Save Freelancer Profile"
+          >
+            {savingProfile ? (
+              <ActivityIndicator size="small" color={colors.onPrimary} />
+            ) : (
+              <Text style={styles.saveLlmButtonText}>Update Profile</Text>
+            )}
+          </Pressable>
         </View>
 
         {/* Card 1: Local LLM Configuration */}

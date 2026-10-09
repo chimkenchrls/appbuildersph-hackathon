@@ -56,6 +56,8 @@ interface ProjectOverviewScreenProps {
   onBack: () => void;
   onReleaseScope?: () => void;
   onEditScopeDraft?: () => void;
+  freelancerName?: string;
+  freelancerRole?: string;
 }
 
 function FreelancerCheckIcon({ size = 18 }: { size?: number }) {
@@ -194,6 +196,8 @@ export function ProjectOverviewScreen({
   onBack,
   onReleaseScope,
   onEditScopeDraft,
+  freelancerName = 'Independent Developer',
+  freelancerRole = 'Independent Professional',
 }: ProjectOverviewScreenProps) {
   const insets = useSafeAreaInsets();
   const [versionPickerOpen, setVersionPickerOpen] = useState(false);
@@ -373,7 +377,7 @@ export function ProjectOverviewScreen({
     setIsExportingPdf(true);
     try {
       const shared = await ShareService.shareContractPdf(activeAgreement, {
-        freelancerName: 'Independent Developer',
+        freelancerName: freelancerName || 'Independent Developer',
         clientName: currentProject.clientName || 'Client',
         paymentMethod: 'Bank Transfer / GCash / Maya',
       });
@@ -395,7 +399,7 @@ export function ProjectOverviewScreen({
     await hapticImpactLight();
     try {
       const shared = await ShareService.shareContract(activeAgreement, {
-        freelancerName: 'Independent Developer',
+        freelancerName: freelancerName || 'Independent Developer',
         clientName: currentProject.clientName || 'Client',
         paymentMethod: 'Bank Transfer / GCash / Maya',
       });
@@ -1101,8 +1105,8 @@ export function ProjectOverviewScreen({
                 </View>
                 <View style={styles.previewPartyCol}>
                   <Text style={styles.previewSectionMini}>FREELANCER</Text>
-                  <Text style={styles.previewPartyName}>Independent Developer</Text>
-                  <Text style={styles.previewPartySub}>Contractor</Text>
+                  <Text style={styles.previewPartyName}>{freelancerName || 'Independent Developer'}</Text>
+                  <Text style={styles.previewPartySub}>{freelancerRole || 'Contractor'}</Text>
                 </View>
               </View>
 
@@ -1197,7 +1201,7 @@ export function ProjectOverviewScreen({
               <View style={styles.previewSignaturesBox}>
                 <View style={styles.previewSigCol}>
                   <Text style={styles.previewSigLabel}>FREELANCER</Text>
-                  <Text style={styles.previewSigStatus}>✓ Confirmed in Vault</Text>
+                  <Text style={styles.previewSigStatus}>Confirmed by {freelancerName || 'Freelancer'}</Text>
                 </View>
                 <View style={styles.previewSigCol}>
                   <Text style={styles.previewSigLabel}>CLIENT</Text>

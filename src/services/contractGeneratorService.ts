@@ -263,7 +263,7 @@ Date: _________________________________________
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Service Agreement - ${escape(agreement.title)}</title>
+  <title>Contract Form ${escape(clientName || 'Client')}</title>
   <style>
     @page {
       size: letter portrait;

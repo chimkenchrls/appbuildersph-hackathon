@@ -22,6 +22,7 @@ import { ScopeReviewScreen } from '@/screens/ScopeReviewScreen';
 import { ProposalScreen } from '@/screens/ProposalScreen';
 import { AgreementsScreen } from '@/screens/AgreementsScreen';
 import { SettingsScreen } from '@/screens/SettingsScreen';
+import { OnboardingScreen } from '@/screens/OnboardingScreen';
 import type {
   Project,
   Agreement,
@@ -65,6 +66,11 @@ export function HomeScreen() {
   const [activeDraft, setActiveDraft] = useState<ScopeDraft | null>(null);
   const [analysis, setAnalysis] = useState<ScopeGuardAnalysis | null>(null);
   const [proposal, setProposal] = useState<ChangeProposal | null>(null);
+
+  // Onboarding & Freelancer Profile states
+  const [isOnboardingCompleted, setIsOnboardingCompleted] = useState<boolean | null>(null);
+  const [freelancerName, setFreelancerName] = useState<string>('');
+  const [freelancerRole, setFreelancerRole] = useState<string>('');
 
   // Load backend and database records on mount
   useEffect(() => {
@@ -119,8 +125,15 @@ export function HomeScreen() {
           }
         }
 
+        const onboarded = await backend.repositories.settings.get('onboarding_completed');
+        const savedName = await backend.repositories.settings.get('freelancer_name');
+        const savedRole = await backend.repositories.settings.get('freelancer_role');
+
         if (isMounted) {
           setServices(backend);
+          setIsOnboardingCompleted(onboarded === 'true');
+          setFreelancerName(savedName || '');
+          setFreelancerRole(savedRole || '');
           setProjects(loadedProjects);
           setProjectAgreements(agreementsMap);
           setProjectRequests(requestsMap);
@@ -183,6 +196,11 @@ export function HomeScreen() {
       setProjectRequests(requestsMap);
       setAnalysesMap(analysesDict);
       setProposalsMap(proposalsDict);
+
+      const storedName = await services.repositories.settings.get('freelancer_name');
+      const storedRole = await services.repositories.settings.get('freelancer_role');
+      if (storedName) setFreelancerName(storedName);
+      if (storedRole) setFreelancerRole(storedRole);
     } catch {
       // ignore
     }
@@ -753,6 +771,16 @@ export function HomeScreen() {
     await refreshData();
   };
 
+  const handleCompleteOnboarding = async (profile: { name: string; role: string }) => {
+    if (!services) return;
+    await services.repositories.settings.set('freelancer_name', profile.name);
+    await services.repositories.settings.set('freelancer_role', profile.role);
+    await services.repositories.settings.set('onboarding_completed', 'true');
+    setFreelancerName(profile.name);
+    setFreelancerRole(profile.role);
+    setIsOnboardingCompleted(true);
+  };
+
   if (loading) {
     return (
       <SafeAreaView style={styles.loadingScreen}>
@@ -769,6 +797,10 @@ export function HomeScreen() {
         <Text style={styles.errorText}>{error}</Text>
       </SafeAreaView>
     );
+  }
+
+  if (isOnboardingCompleted === false) {
+    return <OnboardingScreen onComplete={handleCompleteOnboarding} />;
   }
 
   return (
@@ -812,6 +844,8 @@ export function HomeScreen() {
               requests={projectRequests[activeProject.id] || []}
               analyses={analysesMap}
               proposals={proposalsMap}
+              freelancerName={freelancerName}
+              freelancerRole={freelancerRole}
               onSelectProject={(id) => {
                 setSelectedProjectId(id);
                 const agmts = projectAgreements[id] || [];
@@ -954,6 +988,10 @@ export function HomeScreen() {
                   <SettingsScreen
                     services={services}
                     onDataReset={handleDataReset}
+                    onProfileUpdated={(name, role) => {
+                      setFreelancerName(name);
+                      setFreelancerRole(role);
+                    }}
                   />
                 )}
               </SlideTransition>
