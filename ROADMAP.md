@@ -284,21 +284,21 @@ Update this section while implementing. Keep it concise and include concrete evi
 
 ### Decisions to record
 
-- Repository location:
-- Demonstration device and OS:
-- Permitted model and quantization:
-- Model/runtime compatibility result:
-- Native runtime and dependency versions:
-- Build/signing and installation method:
-- Model provisioning method:
-- Observed inference timings:
-- Any approved scope changes:
+- Repository location: https://github.com/chimkenchrls/diligentdev
+- Demonstration device and OS: Nothing Phone 3a (Android, 8 GB RAM) for the APK. An iPhone 15 Pro Max with Expo Go is used for development testing.
+- Permitted model and quantization: Qwen3.5 9B, Q4_K_M (5.24 GB). Qwen3.5 4B (about 2.8 GB) is the fallback. The model is never bundled in the APK.
+- Model/runtime compatibility result: The model runs in LM Studio on a nearby computer, which the phone reaches over Wi-Fi (OpenAI-compatible API on port 1234). On-device inference with llama.rn 0.12.9 is installed and configured, but loading the model on the phone has not been tested.
+- Native runtime and dependency versions: Expo SDK 57, React Native 0.86.3, llama.rn 0.12.9 (requires New Architecture), Zod 4, TypeScript 6. The LM Studio adapter sends `reasoning_effort: "none"`, because Qwen3.5 otherwise spends the whole token budget thinking.
+- Build/signing and installation method: EAS cloud build, `preview` profile (APK), Expo account `rensyi`, project `@rensyi/diligent-dev`, package `com.saklaw.dds`. Installed from the EAS download link. The LM Studio address (`EXPO_PUBLIC_LM_STUDIO_URL`) and model id (`EXPO_PUBLIC_LM_STUDIO_MODEL`) are set in the EAS `preview` environment and built into the APK. The app saves the address in its database on first launch and uses the saved value first, so clear the app's data after changing it.
+- Model provisioning method: Not applicable for the demo. The model lives in LM Studio on a nearby computer and is not in the APK or on the phone.
+- Observed inference timings: ScopeGuard comparison takes about 18 to 28 seconds on the developer laptop (Qwen3.5 9B in LM Studio), measured with the live eval `tests/eval/scopeGuard.eval.ts`. Timings on the teammate's desktop and on the phone are not recorded yet.
+- Any approved scope changes: AI is "Local AI, internet allowed": it runs on a computer on the same network, not on the phone, so the demo does not run fully offline. The proposal's fee, duration and total come from the user's inputs, not from the model. The model only writes the opening paragraph.
 
 ### Delivery record
 
-- Final build location:
-- Installation instructions:
-- Verification date and device:
-- Acceptance-check results:
-- Known limitations:
-- Remaining work:
+- Final build location: https://expo.dev/accounts/rensyi/projects/diligent-dev/builds/4225af0e-994d-4c5b-957f-57d02195c308 (`preview` profile)
+- Installation instructions: Uninstall any earlier version (or clear its data). Install the APK from the build link. Join the phone to the same Wi-Fi as the LM Studio computer, which must have the model loaded and the server running with "Serve on Local Network" on and port 1234 open in its firewall.
+- Verification date and device: 2026-10-10, Nothing Phone 3a.
+- Acceptance-check results: On the phone, the "Local AI: Ready" status stayed stable. Extraction was faithful to the conversation, agreement confirmation worked, ScopeGuard gave the expected result for each tested request, proposal generation and saving worked, data persisted after closing and reopening, and the app failed cleanly with LM Studio stopped. Automated checks pass: 92 Jest tests, `tsc --noEmit` and `expo lint`.
+- Known limitations: The app depends on the LM Studio computer's IP address, which is fixed at build time. If it changes, rebuild. The phone and the computer must be on the same network. Occasionally the model cites an invalid requirement ID. The app then shows an error, never a wrong result. The tax treatment defaults to `net_of_withholding` when the conversation does not mention it (`briefCraftService.ts`, `kasunduanVaultService.ts`, `agreementRepository.ts`, migration 002), which breaks the rule that missing information stays empty.
+- Remaining work: On-device model test with llama.rn. Remove the dev-only `ai-check` screen (`src/screens/AiCheckScreen.tsx`, `src/app/ai-check.tsx`). Rehearse the demonstration. Fix the tax default.

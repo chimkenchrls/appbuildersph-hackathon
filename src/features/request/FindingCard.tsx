@@ -38,6 +38,9 @@ export function FindingCard({ finding, agreement, selected, onToggle, selectable
           ))}
         </View>
       ) : null}
+      {finding.classification === 'needs_clarification' ? (
+        <Text style={type.support}>Nothing to include yet. Ask your client to clarify, then enter their answer as a new request.</Text>
+      ) : null}
       {finding.classification === 'potential_additional' ? (
         <CheckRow label="Include in proposal" checked={selected} onToggle={onToggle} disabled={!selectable} />
       ) : null}

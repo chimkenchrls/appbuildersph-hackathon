@@ -2,6 +2,7 @@ import { LLMEngineUnavailableError, LLMGenerationTimeoutError, LLMParseError } f
 import { parseAndValidateJson } from '@/llm/jsonParser';
 import { buildChangeDeskPrompt } from '@/llm/prompts/changeDeskPrompt';
 import { buildScopeGuardPrompt } from '@/llm/prompts/scopeGuardPrompt';
+import { composeProposalMessage } from '@/safety/proposalMessage';
 import type { SaklawAi } from '@/services/contracts';
 import { checkCancelled, ServiceError } from '@/services/errors';
 import { ChangeDeskRawOutputSchema, ScopeGuardRawOutputSchema } from '@/types/schemas';
@@ -26,13 +27,18 @@ export function createBackendAi(getPorts: () => Promise<BackendPorts>): SaklawAi
   const setAvailable = (value: boolean) => {
     if (available !== value) { available = value; emit(); }
   };
+  let missedChecks = 0;
   const checkAvailability = async () => {
     if (running > 0) return;
+    let reachable = false;
     try {
-      setAvailable(await (await getPorts()).engine.isAvailable());
+      reachable = await (await getPorts()).engine.isAvailable();
     } catch {
-      setAvailable(false);
+      reachable = false;
     }
+    missedChecks = reachable ? 0 : missedChecks + 1;
+    // One slow reply on weak Wi-Fi is not an outage: report unavailable after two misses in a row.
+    if (reachable || missedChecks >= 2 || available === null) setAvailable(reachable);
   };
 
   function toAiError(error: unknown): ServiceError {
@@ -110,12 +116,15 @@ export function createBackendAi(getPorts: () => Promise<BackendPorts>): SaklawAi
         const messages = buildChangeDeskPrompt({
           agreementTitle: stored?.title ?? `Agreement v${input.agreement.version}`,
           selectedItems: input.deliverables,
-          feeEstimate: input.feeAmount,
-          daysEstimate: input.extraWorkingDays,
-          currency: input.currency,
         });
         const raw = await ports.engine.generate(messages, { temperature: 0.4, maxTokens: 1000 });
-        return parseAndValidateJson(raw, ChangeDeskRawOutputSchema).draft_message;
+        const narrative = parseAndValidateJson(raw, ChangeDeskRawOutputSchema).draft_message;
+        return composeProposalMessage(narrative, {
+          deliverables: input.deliverables,
+          feeAmount: input.feeAmount,
+          currency: input.currency,
+          extraWorkingDays: input.extraWorkingDays,
+        });
       }),
   };
 }

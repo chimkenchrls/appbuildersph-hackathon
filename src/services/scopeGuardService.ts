@@ -1,12 +1,11 @@
-import { overallClassification } from '@/safety/persistedSchemas';
-import { ServiceError } from './errors';
 import type { LLMEngine } from '@/llm/contracts';
 import { parseAndValidateJson } from '@/llm/jsonParser';
 import { buildScopeGuardPrompt } from '@/llm/prompts/scopeGuardPrompt';
 import { ScopeGuardRawOutputSchema } from '@/types/schemas';
 import type { AgreementRepository } from '@/database/repositories/agreementRepository';
 import type { ScopeGuardRepository } from '@/database/repositories/scopeGuardRepository';
-import type { ScopeGuardAnalysis, Finding } from '@/types/domain';
+import { validateScopeGuardFindings } from '@/safety/scopeGuardValidation';
+import type { ScopeGuardAnalysis } from '@/types/domain';
 
 export class ScopeGuardService {
   constructor(
@@ -41,18 +40,8 @@ export class ScopeGuardService {
 
     const parsed = parseAndValidateJson(rawOutput, ScopeGuardRawOutputSchema);
 
-    // Sanitize and verify evidence requirement IDs against stored agreement clauses
-    const findings: Finding[] = parsed.findings.map((f) => {
-      const ids = f.evidence_requirement_ids;
-      if (ids.some(id => !validRequirementIds.has(id)) || new Set(ids).size !== ids.length ||
-        (f.classification === 'included' && !ids.length)) throw new ServiceError('invalid_output');
-      return {
-        item: f.item,
-        classification: f.classification,
-        explanation: f.explanation,
-        evidenceRequirementIds: ids,
-      };
-    });
+    // Reject invalid evidence and derive the overall classification from the findings
+    const { classification, findings } = validateScopeGuardFindings(parsed.findings, validRequirementIds);
 
     const now = new Date().toISOString();
     const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
@@ -63,10 +52,10 @@ export class ScopeGuardService {
       id: analysisId,
       requestId,
       agreementId,
-      classification: overallClassification(findings),
+      classification,
       summary: parsed.summary,
       findings,
-      clarificationQuestions: parsed.clarification_questions,
+      clarificationQuestions: parsed.clarification_questions ?? [],
       createdAt: now,
     };
 

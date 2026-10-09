@@ -286,7 +286,10 @@ describe('AI routed through the backend engine', () => {
 
     const drafting = await confirmed(engineReturning('{"draft_message":"Hello, here is my proposal."}'));
     const message = await drafting.ai.draftProposalMessage({ agreement: drafting.agreement, requestText: 'x', deliverables: ['Booking'], feeAmount: 7000, currency: 'PHP', extraWorkingDays: 5 }, never);
-    expect(message).toBe('Hello, here is my proposal.');
+    expect(message.startsWith('Hello, here is my proposal.')).toBe(true);
+    expect(message).toContain('- Booking');
+    expect(message).toContain('Estimated additional fee: PHP 7,000');
+    expect(message).toContain('Estimated additional time: 5 working days');
   });
 
   test('Stop rejects at once, and the engine stays busy until its request really ends', async () => {
