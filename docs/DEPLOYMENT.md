@@ -65,8 +65,18 @@ Observed from outside on 10 October 2026 (Asia/Manila), without access to the Ve
 - Deployment URLs such as `https://owlset-<id>-ck21-0485.vercel.app` redirect to a Vercel login,
   so the smoke checks target the production domain.
 
-Not verified, because it needs dashboard access: the Root Directory, framework preset, command
-overrides, Node.js version, production branch, and which project owns each domain. Check them in step 1.
+Read from the Vercel API on the same day, after the project was linked:
+
+- Root Directory is the repository root, the framework preset is Other, the production branch is
+  `main`, and the project has no environment variables.
+- The project stores a build command (`npm run build:web`) and output directory (`dist`) that
+  match `vercel.json`. The install command comes from `vercel.json`.
+- Both domains belong to this project. `owlset-silk.vercel.app` is configured to redirect to
+  `owlsetph.vercel.app`.
+- The project's Node.js Version is 24.x. Builds run by Actions use Node 22, and `engines.node`
+  overrides the setting for any build Vercel runs itself, so this does not affect deployments.
+  Setting it to 22.x in step 1 keeps the dashboard consistent.
+- The team's other project is unrelated and holds no OwlSet domain.
 
 ## One-time setup
 
@@ -98,13 +108,18 @@ should not hold a public OwlSet domain. Do not add a `/` route to it to hide a w
 On your own machine, in the repository root:
 
 ```sh
-npx vercel@63.1.0 login
-npx vercel@63.1.0 link        # choose the team and the existing project from step 1
-cat .vercel/project.json      # {"projectId":"prj_...","orgId":"team_..."}
+npx vercel@63.1.0 link        # logs in if needed; choose the team and the existing project from step 1
+cat .vercel/repo.json         # or .vercel/project.json, depending on how the CLI linked
 ```
 
-`.vercel/` is ignored by Git. Never commit it. `orgId` is the value for `VERCEL_ORG_ID` and
-`projectId` is the value for `VERCEL_PROJECT_ID`.
+When the CLI links through the Git remote it writes `.vercel/repo.json`: the project's `id`
+(`prj_...`) is the value for `VERCEL_PROJECT_ID` and its `orgId` (`team_...`) is the value for
+`VERCEL_ORG_ID`. An older-style link writes `.vercel/project.json` with `projectId` and `orgId`.
+
+`.vercel/` is ignored by Git. Never commit it. The CLI also creates `.env.local` holding a
+short-lived token, and appends `.vercel` and `.env*` to `.gitignore`. Both files were already
+ignored, and `.env*` would also ignore `.env.example`, so discard that edit:
+`git checkout -- .gitignore`.
 
 ### 3. Create a Vercel token
 
@@ -121,8 +136,8 @@ In GitHub, open **Settings → Environments → Production** and add:
 | Kind | Name | Value |
 | --- | --- | --- |
 | Secret | `VERCEL_TOKEN` | the token from step 3 |
-| Secret | `VERCEL_ORG_ID` | `orgId` from step 2 |
-| Secret | `VERCEL_PROJECT_ID` | `projectId` from step 2 |
+| Secret | `VERCEL_ORG_ID` | the `team_...` value from step 2 |
+| Secret | `VERCEL_PROJECT_ID` | the `prj_...` value from step 2 |
 | Variable | `PRODUCTION_URL` | the site's origin with no trailing path, for example `https://owlsetph.vercel.app` |
 
 Or with the GitHub CLI (each `secret set` prompts for the value, so it stays out of shell history):
