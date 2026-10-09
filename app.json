@@ -9,7 +9,11 @@
       "typedRoutes": true
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.diligentdev.app"
+    },
+    "android": {
+      "package": "com.diligentdev.app"
     },
     "web": {
       "bundler": "metro",
@@ -18,7 +22,9 @@
     "plugins": [
       "expo-router",
       "expo-status-bar",
-      "expo-sqlite"
+      "expo-sqlite",
+      "expo-font",
+      "expo-sharing"
     ]
   }
 }

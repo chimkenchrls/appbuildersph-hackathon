@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import type { LLMEngine, LLMMessage, GenerationOptions } from '../contracts';
 import { LLMEngineUnavailableError } from '../contracts';
+import { withKeepAwake } from '@/utils/keepAwake';
 
 export interface LMStudioAdapterConfig {
   getBaseUrl?: () => Promise<string>;
@@ -14,7 +15,7 @@ export class LMStudioAdapter implements LLMEngine {
   private readonly getModel: () => Promise<string>;
 
   constructor(config: LMStudioAdapterConfig = {}) {
-    this.timeoutMs = config.timeoutMs ?? 60000;
+    this.timeoutMs = config.timeoutMs ?? 8000;
 
     const defaultUrl = Platform.OS === 'android' ? 'http://10.0.2.2:1234/v1' : 'http://localhost:1234/v1';
 
@@ -26,7 +27,7 @@ export class LMStudioAdapter implements LLMEngine {
     try {
       const baseUrl = await this.getBaseUrl();
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 3000);
+      const timer = setTimeout(() => controller.abort(), 1200);
 
       const response = await fetch(`${baseUrl}/models`, {
         method: 'GET',
@@ -41,53 +42,55 @@ export class LMStudioAdapter implements LLMEngine {
   }
 
   async generate(messages: LLMMessage[], options: GenerationOptions = {}): Promise<string> {
-    const baseUrl = await this.getBaseUrl();
-    const model = await this.getModel();
+    return await withKeepAwake(async () => {
+      const baseUrl = await this.getBaseUrl();
+      const model = await this.getModel();
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => controller.abort(), this.timeoutMs);
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), this.timeoutMs);
 
-    try {
-      const response = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model,
-          messages,
-          temperature: options.temperature ?? 0.1,
-          max_tokens: options.maxTokens ?? 1024,
-        }),
-        signal: controller.signal,
-      });
+      try {
+        const response = await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model,
+            messages,
+            temperature: options.temperature ?? 0.1,
+            max_tokens: options.maxTokens ?? 1024,
+          }),
+          signal: controller.signal,
+        });
 
-      clearTimeout(timer);
+        clearTimeout(timer);
 
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`LM Studio returned HTTP ${response.status}: ${errorText}`);
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`LM Studio returned HTTP ${response.status}: ${errorText}`);
+        }
+
+        const data = (await response.json()) as {
+          choices?: { message?: { content?: string } }[];
+        };
+
+        const content = data.choices?.[0]?.message?.content;
+        if (typeof content !== 'string') {
+          throw new Error('LM Studio response choices missing content');
+        }
+
+        return content;
+      } catch (err) {
+        clearTimeout(timer);
+        if ((err as Error).name === 'AbortError') {
+          throw new LLMEngineUnavailableError(`Request timed out after ${this.timeoutMs}ms`);
+        }
+        if (err instanceof LLMEngineUnavailableError) {
+          throw err;
+        }
+        throw new LLMEngineUnavailableError(`Failed to communicate with LM Studio: ${(err as Error).message}`);
       }
-
-      const data = (await response.json()) as {
-        choices?: { message?: { content?: string } }[];
-      };
-
-      const content = data.choices?.[0]?.message?.content;
-      if (typeof content !== 'string') {
-        throw new Error('LM Studio response choices missing content');
-      }
-
-      return content;
-    } catch (err) {
-      clearTimeout(timer);
-      if ((err as Error).name === 'AbortError') {
-        throw new LLMEngineUnavailableError(`Request timed out after ${this.timeoutMs}ms`);
-      }
-      if (err instanceof LLMEngineUnavailableError) {
-        throw err;
-      }
-      throw new LLMEngineUnavailableError(`Failed to communicate with LM Studio: ${(err as Error).message}`);
-    }
+    }, 'lmstudio_inference');
   }
 }

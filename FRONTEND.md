@@ -13,9 +13,9 @@ prepare change proposals. The freelancer controls commitments; AI assists.
 | Decision | Guideline |
 | --- | --- |
 | Primary target | Android mobile app, delivered as a standalone APK. |
-| Other native target | Preserve iOS compatibility where practical; it is secondary. |
+| Other native target | The same shared UI supports iPhone and adaptive iPad layouts; iOS delivery remains secondary. Verify native integrations and device behavior separately. |
 | Web | Product landing page, not a browser version of the workspace. |
-| Visual direction | Calm, professional, readable; light surfaces and deep teal accents. |
+| Visual direction | Calm, professional, readable; Light Mode First: crisp white canvas, eucalyptus / sage teal primary accent (`#539696`), high-contrast dark charcoal typography (`#1E1E1E`), clean bordered cards with teal outline (`#539696`), and sky blue subtitle underline (`#5DADE7`). |
 | Language | English interface; retain established product/module names where useful. |
 | Navigation | Project-centered stack, rather than a tab for every module. |
 | MVP input | Pasted conversations and manually entered requirements. |
@@ -193,65 +193,87 @@ current task. Keep marketing headlines on the landing page.
 
 Use React Native primitives and `StyleSheet`. Define shared semantic tokens in
 `src/constants/theme.ts` and consume them from reusable UI components. The
-values below are initial defaults within the agreed direction, not existing code:
+values below are the Light Mode tokens in that file, sampled directly from the
+approved UI design:
 
-| Token | Default | Purpose |
+| Token | Value | Purpose |
 | --- | --- | --- |
-| `background` | `#F6F8F8` | App canvas. |
-| `surface` | `#FFFFFF` | Forms and content surfaces. |
-| `textPrimary` | `#172B2A` | Headings and primary text. |
-| `textSecondary` | `#4B6260` | Supporting text. |
-| `primary` | `#0F766E` | Primary actions and focus emphasis. |
+| `background` | `#FFFFFF` | App canvas. |
+| `surface` | `#FFFFFF` | Forms, cards, and content surfaces. |
+| `surfaceSubtle` | `#F8FAFA` | Inputs, secondary wells, subtle containers. |
+| `surfaceRaised` | `#F0F6F6` | Pressed rows, hover states, disabled fill. |
+| `textPrimary` | `#1E1E1E` | Headings, project titles, client names, primary text. |
+| `textSecondary` | `#565656` | Subtitles, supporting text, status labels. |
+| `textMuted` | `#727272` | Agreement IDs, metadata, placeholders. |
+| `primary` | `#539696` | Primary actions (New Project button), card border outlines. |
+| `primaryPressed` | `#437A7A` | Pressed state for primary buttons. |
+| `primaryMuted` | `#A9CACA` | Internal card divider lines, muted accents. |
 | `onPrimary` | `#FFFFFF` | Text on primary actions. |
-| `border` | `#CBD5D1` | Decorative separators; not the sole control boundary. |
-| `controlBorder` | `#647875` | Input boundaries and meaningful outlines. |
-| `successText` / `successSurface` | `#166534` / `#F0FDF4` | Included status. |
-| `warningText` / `warningSurface` | `#92400E` / `#FFFBEB` | Potential additional work. |
-| `infoText` / `infoSurface` | `#1E40AF` / `#EFF6FF` | Clarification required. |
-| `errorText` / `errorSurface` | `#991B1B` / `#FEF2F2` | Failed operations and validation errors. |
+| `accentBlue` | `#5DADE7` | Header brand underline ("Your Private Workspace"). |
+| `border` | `#E8E8E8` | Header bottom divider, subtle separators. |
+| `cardBorder` | `#539696` | Project card border outline. |
+| `controlBorder` | `#CBD5E1` | Input boundaries and control outlines. |
+| `successText` / `successSurface` | `#2E7D32` / `#E8F5E9` | Included status, confirmed scope. |
+| `warningText` / `warningSurface` | `#B45309` / `#FEF3C7` | Potential additional work; unsaved changes. |
+| `infoText` / `infoSurface` | `#1D4ED8` / `#EFF6FF` | Clarification required. |
+| `errorText` / `errorSurface` | `#DC2626` / `#FEE2E2` | Failed operations and validation errors. |
+| `aiText` / `aiSurface` | `#6B21A8` / `#F3E8FF` | AI suggestions. |
 
-- Use system sans-serif fonts initially. Bundle any later custom font locally;
-  do not fetch it at runtime. Keep the same family throughout the product.
-- Default body/input text to 16, supporting text to 14, headings to 22–28,
+- Use system sans-serif fonts for reading and the system monospace font for
+  requirement IDs, version labels, and badges. Bundle any later custom font locally;
+  do not fetch it at runtime.
+- Default body/input text to 16, supporting text to 14, headings to 22–32,
   with comfortable line height and system font scaling enabled.
-- Use a 4/8-unit spacing scale: 4, 8, 12, 16, 24, 32. Phone gutters start at 16.
-- Use modest 8–12-unit corners, restrained elevation, and consistent borders.
-  Avoid glass effects, animated gradients, ornamental dashboards, and excessive cards.
-- Use one clear primary action per task section. Show disabled reasons where relevant.
+- Use a 4/8-unit spacing scale: 4, 8, 12, 16, 20, 24, 32. Phone gutters start at 16–20.
+- Use rounded corners (`borderRadius: 14–16`) for primary buttons and project cards,
+  with crisp 1.5px `#539696` border outlines and thin `#A9CACA` internal dividers.
+- Use one clear primary action per task section (e.g. "+ New Project"). Show disabled reasons where relevant.
 - Status indicators combine text with an optional consistent icon; never rely
   on red/green or color alone. Avoid emoji as structural icons.
-- Reuse an existing native-compatible icon set. Discuss installing one first;
-  browser-only icon components do not belong in shared native screens.
+- Icons come from `@react-native-vector-icons/lucide` through the `Icon` wrapper in
+  `src/components/ui/Icon.tsx`, which lists the allowed names. Browser-only icon
+  components do not belong in shared native screens.
 - Provide immediate pressed feedback. Keep optional motion brief and respect
   reduced-motion preferences; inference progress must not depend on animation.
-- Retain the current light-mode baseline for the MVP. A theme toggle is not a
-  required feature; any later dark mode needs independent semantic colors and testing.
+- The MVP focuses on Light Mode first (`userInterfaceStyle: "light"` in `app.json`),
+  strictly following the approved minimalist workspace structure.
 
 Reusable primitives should emerge from repeated needs: Button, labeled TextField,
 StatusBadge, EvidenceItem, EmptyState, and InlineError. Support relevant accessibility
 and busy/disabled states. Do not build a component catalog before the first flow.
 
-## 7. Android usability and accessibility
+## 7. Android and iOS usability and accessibility
 
 - Support small phones and larger screens with flexible, scrollable layouts.
   Do not hardcode desktop widths or truncate clauses needed to understand evidence.
-- Respect safe areas and Android system bars. Fixed actions need matching scroll
-  insets and must remain accessible when the keyboard opens.
+- Use the same four screens and product behavior on Android and iOS. Keep platform
+  adjustments in shared components or modules outside the route directory.
+- Respect Android system bars, iPhone notches/Dynamic Island, landscape safe areas,
+  and the home indicator. Reserve space for bottom actions without double-applying
+  insets; actions must remain accessible when the keyboard opens.
+- Preserve adaptive iPad layouts while `ios.supportsTablet` is enabled: use readable
+  content widths and support rotation and narrow multitasking windows.
 - Use at least 48 × 48 logical units for Android touch targets; allow spacing
   between adjacent actions. Preserve iOS targets of at least 44 × 44 where applicable.
 - Give every field a persistent label, not just a placeholder. Use appropriate
   keyboard types, multiline input behavior, visible errors, and recoverable validation.
-- Test keyboard avoidance on Android; do not copy an iOS-only configuration blindly.
+- Test keyboard avoidance independently on Android and iOS, including multiline inputs
+  and numeric keyboards. Provide an accessible dismissal action when a keyboard has
+  no Done/Return key; keep validation feedback and bottom actions reachable.
 - Announce actionable errors and important save/generation state changes through
   accessible feedback. Avoid announcing every streamed token.
-- Keep TalkBack reading order aligned with the visual order. Label icon buttons
+- Keep TalkBack and VoiceOver reading order aligned with the visual order. Label icon buttons
   and expose disabled/selected/expanded states; hide purely decorative imagery.
+- Verify announcements on both platforms; Android-only live-region behavior is not
+  sufficient evidence that VoiceOver announces errors and save/generation results.
 - Allow large system text without overlapping labels or losing actions. Essential
-  content and buttons must remain reachable at increased font sizes.
+  content and buttons must remain reachable at increased font sizes, including iOS
+  accessibility text sizes through Dynamic Type.
 - Normal text needs at least 4.5:1 contrast; meaningful controls and indicators
   need at least 3:1. Recheck composed colors for pressed, focused, and error states.
-- Do not make required actions swipe-only or depend on long presses. Keep Android
-  Back predictable and protect unsaved work.
+- Do not make required actions swipe-only or depend on long presses. Keep a visible
+  Back control, preserve normal iOS back gestures, and guard header Back, Android
+  hardware Back, and iOS edge swipes consistently against loss of unsaved work.
 
 ## 8. Component and code boundaries
 
@@ -373,6 +395,14 @@ Before accepting the core flow, verify on a physical Android device:
 - Check small-screen layout, large system text, TalkBack, keyboard, and hardware Back.
 - Complete the flow in a signed standalone APK without Metro or Expo Go, following
   the architecture's offline first-launch and upgrade acceptance requirements.
+
+When iOS builds and devices are available, repeat the shared workflow and failure
+cases on iPhone, including small screens, safe areas, landscape, VoiceOver, large
+accessibility text, numeric-keyboard dismissal, copy feedback, and guarded back
+gestures. Check iPad full-screen and narrow multitasking layouts while tablet support
+is enabled. Record unavailable builds, signing access, or devices and the exact checks
+still pending. A shared UI or simulator preview does not establish physical-device
+inference compatibility; Android APK acceptance remains the primary release gate.
 
 Use the fictional website scenario from `PROJECT.md` as a labeled demo fixture:
 five pages and a contact form, PHP 15,000, two weeks, two revision rounds;

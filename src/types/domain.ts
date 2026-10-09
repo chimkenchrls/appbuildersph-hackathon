@@ -48,6 +48,7 @@ export interface Project {
   title: string;
   clientName: string | null;
   description: string | null;
+  draftScopeJson?: string | null;
   createdAt: string;
   updatedAt: string;
 }

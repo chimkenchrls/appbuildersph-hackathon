@@ -52,12 +52,32 @@ export class ChangeDeskService {
       currency,
     });
 
-    const rawOutput = await this.engine.generate(messages, {
-      temperature: 0.4,
-      maxTokens: 1000,
-    });
+    let draftMessage = '';
 
-    const parsed = parseAndValidateJson(rawOutput, ChangeDeskRawOutputSchema);
+    try {
+      const isAvail = await this.engine.isAvailable();
+      if (isAvail) {
+        const rawOutput = await this.engine.generate(messages, {
+          temperature: 0.4,
+          maxTokens: 1000,
+        });
+
+        const parsed = parseAndValidateJson(rawOutput, ChangeDeskRawOutputSchema);
+        draftMessage = parsed.draft_message;
+      }
+    } catch {
+      // Fall through to offline heuristic
+    }
+
+    if (!draftMessage) {
+      const itemsList = selectedItems.join(' and ');
+      const estimateClause =
+        freelancerFeeEstimate != null && freelancerDaysEstimate != null
+          ? ` For these additions, I estimate an additional ${currency} ${freelancerFeeEstimate.toLocaleString()} and around ${freelancerDaysEstimate} days turnaround.`
+          : '';
+
+      draftMessage = `Hi! Thanks for sharing the updates. ${itemsList} would add to what was agreed in ${agreementTitle}.${estimateClause} Please review this proposal and let me know if you'd like to proceed. I'll record your approval before beginning the extra work.`;
+    }
 
     const now = new Date().toISOString();
     const proposalId = `prop_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
@@ -70,7 +90,7 @@ export class ChangeDeskService {
       freelancerFeeEstimate,
       freelancerDaysEstimate,
       currency,
-      draftMessage: parsed.draft_message,
+      draftMessage,
       status: 'draft',
       createdAt: now,
       updatedAt: now,

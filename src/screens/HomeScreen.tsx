@@ -1,376 +1,736 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo, useCallback } from 'react';
 import {
   ActivityIndicator,
-  Pressable,
-  ScrollView,
+  BackHandler,
   StyleSheet,
   Text,
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { initializeBackendAsync } from '@/services/bootstrapService';
-import { ContractGeneratorService } from '@/services/contractGeneratorService';
-import { ShareService } from '@/services/shareService';
-import type { Project, Agreement } from '@/types/domain';
+import { initializeBackendAsync, type AppServices } from '@/services/bootstrapService';
+import { getDatabaseAsync } from '@/database/client';
+import { seedDemoDataAsync } from '@/database/seed';
+import { colors } from '@/constants/theme';
+import { SlideTransition } from '@/components/SlideTransition';
+import { BottomNavBar, type RootTab } from '@/components/BottomNavBar';
+import { ProjectsScreen } from '@/screens/ProjectsScreen';
+import { NewProjectScreen } from '@/screens/NewProjectScreen';
+import { ScopeDraftScreen } from '@/screens/ScopeDraftScreen';
+import { ProjectOverviewScreen } from '@/screens/ProjectOverviewScreen';
+import { NewRequestScreen } from '@/screens/NewRequestScreen';
+import { ScopeReviewScreen } from '@/screens/ScopeReviewScreen';
+import { ProposalScreen } from '@/screens/ProposalScreen';
+import { AgreementsScreen } from '@/screens/AgreementsScreen';
+import { SettingsScreen } from '@/screens/SettingsScreen';
+import type {
+  Project,
+  Agreement,
+  ScopeDraft,
+  ScopeGuardAnalysis,
+  ChangeProposal,
+} from '@/types/domain';
+
+type SubScreen =
+  | null
+  | 'new_project'
+  | 'draft'
+  | 'overview'
+  | 'new_request'
+  | 'review'
+  | 'proposal';
 
 export function HomeScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [services, setServices] = useState<AppServices | null>(null);
+
+  // Navigation states
+  const [rootTab, setRootTab] = useState<RootTab>('projects');
+  const [subScreen, setSubScreen] = useState<SubScreen>(null);
+  const [stackDirection, setStackDirection] = useState<'forward' | 'backward'>('forward');
+  const [tabDirection, setTabDirection] = useState<'forward' | 'backward'>('forward');
+  const [draftReturnScreen, setDraftReturnScreen] = useState<'new_project' | 'overview'>('new_project');
+
+  // Domain states
   const [projects, setProjects] = useState<Project[]>([]);
-  const [latestAgreement, setLatestAgreement] = useState<Agreement | null>(null);
-  const [lmStudioAvailable, setLmStudioAvailable] = useState<boolean | null>(null);
-  const [contractPreview, setContractPreview] = useState<string | null>(null);
-  const [showFullContract, setShowFullContract] = useState(false);
-  const [shareFeedback, setShareFeedback] = useState<string | null>(null);
+  const [projectAgreements, setProjectAgreements] = useState<Record<string, Agreement[]>>({});
+  const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
+  const [selectedAgreement, setSelectedAgreement] = useState<Agreement | null>(null);
 
+  const [activeDraft, setActiveDraft] = useState<ScopeDraft | null>(null);
+  const [analysis, setAnalysis] = useState<ScopeGuardAnalysis | null>(null);
+  const [proposal, setProposal] = useState<ChangeProposal | null>(null);
+
+  // Load backend and database records on mount
   useEffect(() => {
-    let mounted = true;
+    let isMounted = true;
 
-    async function bootstrap() {
+    async function initialize() {
       try {
-        const { repositories, services, llmEngine } = await initializeBackendAsync();
-        const loadedProjects = await repositories.project.list();
+        const backend = await initializeBackendAsync();
+        const loadedProjects = await backend.repositories.project.list();
 
-        let agmt: Agreement | null = null;
-        if (loadedProjects.length > 0) {
-          agmt = await services.kasunduanVault.getLatestAgreement(loadedProjects[0].id);
+        const agreementsMap: Record<string, Agreement[]> = {};
+        for (const proj of loadedProjects) {
+          const agmts = await backend.repositories.agreement.listByProjectId(proj.id);
+          agreementsMap[proj.id] = agmts;
         }
 
-        const isAvailable = await llmEngine.isAvailable();
+        let latestAnalysis: ScopeGuardAnalysis | null = null;
+        let latestProposal: ChangeProposal | null = null;
 
-        if (mounted) {
+        const defaultProjId =
+          loadedProjects.find((p) => p.id === 'proj_harbor_studio')?.id ||
+          loadedProjects[0]?.id ||
+          null;
+
+        if (defaultProjId) {
+          const analyses = await backend.repositories.scopeGuard.listAnalysesByProjectId(defaultProjId);
+          if (analyses.length > 0) {
+            latestAnalysis = analyses[0];
+          }
+          const proposals = await backend.repositories.proposal.listByProjectId(defaultProjId);
+          if (proposals.length > 0) {
+            latestProposal = proposals[0];
+          }
+        }
+
+        if (isMounted) {
+          setServices(backend);
           setProjects(loadedProjects);
-          setLatestAgreement(agmt);
-          setLmStudioAvailable(isAvailable);
+          setProjectAgreements(agreementsMap);
+          setSelectedProjectId(defaultProjId);
 
-          if (agmt) {
-            const preview = ContractGeneratorService.generateContractText(agmt, {
-              freelancerName: 'Independent Developer',
-              clientName: loadedProjects[0]?.clientName || 'Client',
-              paymentMethod: 'Bank Transfer / GCash / Maya',
-            });
-            setContractPreview(preview);
+          if (defaultProjId && agreementsMap[defaultProjId]?.length > 0) {
+            setSelectedAgreement(agreementsMap[defaultProjId][0]);
           }
 
+          setAnalysis(latestAnalysis);
+          setProposal(latestProposal);
           setLoading(false);
         }
       } catch (err) {
-        if (mounted) {
+        if (isMounted) {
           setError((err as Error).message);
           setLoading(false);
         }
       }
     }
 
-    bootstrap();
+    initialize();
 
     return () => {
-      mounted = false;
+      isMounted = false;
     };
   }, []);
 
-  const handleShareContract = async () => {
-    if (!latestAgreement) return;
+  const refreshData = useCallback(async () => {
+    if (!services) return;
     try {
-      const shared = await ShareService.shareContract(latestAgreement, {
-        freelancerName: 'Independent Developer',
-        clientName: projects[0]?.clientName || 'Client',
-        paymentMethod: 'Bank Transfer / GCash / Maya',
-      });
-      setShareFeedback(shared ? 'Contract shared successfully.' : 'Share dialog dismissed.');
+      const loadedProjects = await services.repositories.project.list();
+      const agreementsMap: Record<string, Agreement[]> = {};
+      for (const proj of loadedProjects) {
+        const agmts = await services.repositories.agreement.listByProjectId(proj.id);
+        agreementsMap[proj.id] = agmts;
+      }
+      setProjects(loadedProjects);
+      setProjectAgreements(agreementsMap);
     } catch {
-      setShareFeedback('Unable to launch share dialog.');
+      // ignore
+    }
+  }, [services]);
+
+  const activeProject = useMemo(() => {
+    return (
+      projects.find((p) => p.id === selectedProjectId) ||
+      projects[0] || {
+        id: 'proj_harbor_studio',
+        title: 'Harbor Studio',
+        clientName: 'Harbor Studio',
+        description: 'Project field',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }
+    );
+  }, [projects, selectedProjectId]);
+
+  const activeAgreements = useMemo(() => {
+    return activeProject ? projectAgreements[activeProject.id] || [] : [];
+  }, [activeProject, projectAgreements]);
+
+  const activeAgreement = useMemo(() => {
+    if (selectedAgreement && selectedAgreement.projectId === activeProject.id) {
+      return selectedAgreement;
+    }
+    return activeAgreements[0] || null;
+  }, [selectedAgreement, activeProject, activeAgreements]);
+
+  // Default fallback draft matching the design specification
+  const defaultDraft: ScopeDraft = useMemo(() => {
+    return {
+      title: activeProject ? activeProject.title : 'Harbor Studio',
+      requirements: [
+        {
+          id: 'REQ-01',
+          title: 'Five responsive pages',
+          description: 'Home, About, Services, Work and Contact.',
+          category: 'deliverable',
+        },
+        {
+          id: 'REQ-02',
+          title: 'Contact form',
+          description: 'Send enquiries to the client.',
+          category: 'deliverable',
+        },
+        {
+          id: 'REQ-03',
+          title: 'Design revisions',
+          description: 'Two rounds of revisions to the agreed pages and contact form.',
+          category: 'term',
+        },
+      ],
+      budgetAmount: 15000,
+      budgetCurrency: 'PHP',
+      budgetNotes: 'Agreed fixed price for initial scope.',
+      durationDays: 14,
+      deadline: null,
+      timelineNotes: '2 weeks turnaround from deposit.',
+      revisionTerms: 'Two rounds of revisions included. Additional revisions quoted separately.',
+      exclusions: [
+        'User account authentication and member portal',
+        'Appointment booking calendar engine',
+      ],
+      missingInformation: [
+        'Delivery date is missing. Add the agreed date before confirming.',
+      ],
+      taxTreatment: 'none_specified',
+    };
+  }, [activeProject]);
+
+  // Navigation helpers
+  const navigateToSubScreen = useCallback(
+    (target: SubScreen, direction: 'forward' | 'backward' = 'forward') => {
+      setStackDirection(direction);
+      setSubScreen(target);
+    },
+    [],
+  );
+
+  const handleSelectTab = useCallback(
+    (tab: RootTab) => {
+      if (tab === rootTab) return;
+      const tabOrder: Record<RootTab, number> = {
+        projects: 0,
+        agreements: 1,
+        settings: 2,
+      };
+      const currentIdx = tabOrder[rootTab];
+      const targetIdx = tabOrder[tab];
+      setTabDirection(targetIdx >= currentIdx ? 'forward' : 'backward');
+      setRootTab(tab);
+    },
+    [rootTab],
+  );
+
+  // Android hardware back button handler
+  useEffect(() => {
+    const onBackPress = () => {
+      if (subScreen === 'proposal') {
+        navigateToSubScreen('review', 'backward');
+        return true;
+      }
+      if (subScreen === 'review') {
+        navigateToSubScreen('new_request', 'backward');
+        return true;
+      }
+      if (subScreen === 'new_request') {
+        navigateToSubScreen('overview', 'backward');
+        return true;
+      }
+      if (subScreen === 'draft') {
+        navigateToSubScreen(draftReturnScreen, 'backward');
+        return true;
+      }
+      if (subScreen === 'overview' || subScreen === 'new_project') {
+        navigateToSubScreen(null, 'backward');
+        return true;
+      }
+      return false;
+    };
+
+    const subscription = BackHandler.addEventListener(
+      'hardwareBackPress',
+      onBackPress,
+    );
+    return () => subscription.remove();
+  }, [subScreen, draftReturnScreen, navigateToSubScreen]);
+
+  // Handlers
+  const handleSelectProject = (projectId: string) => {
+    setSelectedProjectId(projectId);
+    const agmts = projectAgreements[projectId] || [];
+    setSelectedAgreement(agmts[0] || null);
+
+    const targetProject = projects.find((p) => p.id === projectId);
+    if (targetProject?.draftScopeJson) {
+      try {
+        setActiveDraft(JSON.parse(targetProject.draftScopeJson));
+      } catch {
+        // ignore
+      }
+    }
+    navigateToSubScreen('overview', 'forward');
+  };
+
+  const handleViewProjectOverview = (projectId: string) => {
+    setSelectedProjectId(projectId);
+    const agmts = projectAgreements[projectId] || [];
+    setSelectedAgreement(agmts[0] || null);
+
+    const targetProject = projects.find((p) => p.id === projectId);
+    if (targetProject?.draftScopeJson) {
+      try {
+        setActiveDraft(JSON.parse(targetProject.draftScopeJson));
+      } catch {
+        // ignore
+      }
+    }
+    navigateToSubScreen('overview', 'forward');
+  };
+
+  const handleSelectAgreementVersion = (agmt: Agreement) => {
+    setSelectedAgreement(agmt);
+  };
+
+  const handleSelectProjectAgreementFromVault = (
+    projectId: string,
+    agreement: Agreement,
+  ) => {
+    setSelectedProjectId(projectId);
+    setSelectedAgreement(agreement);
+    navigateToSubScreen('overview', 'forward');
+  };
+
+  const handleReleaseProjectScope = async (projectId: string) => {
+    if (!services) return;
+    const project = projects.find((p) => p.id === projectId) || activeProject;
+    if (!project) return;
+
+    let draftToRelease: ScopeDraft = defaultDraft;
+    if (activeDraft && project.id === activeProject.id) {
+      draftToRelease = activeDraft;
+    } else if (project.draftScopeJson) {
+      try {
+        draftToRelease = JSON.parse(project.draftScopeJson);
+      } catch {
+        draftToRelease = defaultDraft;
+      }
+    }
+
+    try {
+      const newAgmt = await services.services.kasunduanVault.confirmScope(
+        project.id,
+        draftToRelease,
+      );
+      setProjectAgreements((prev) => ({
+        ...prev,
+        [project.id]: [newAgmt, ...(prev[project.id] || [])],
+      }));
+      setSelectedProjectId(project.id);
+      setSelectedAgreement(newAgmt);
+      navigateToSubScreen('overview', 'forward');
+    } catch {
+      // ignore
     }
   };
 
+  const handleEditProjectDraft = (projectId: string) => {
+    setSelectedProjectId(projectId);
+    const project = projects.find((p) => p.id === projectId) || activeProject;
+    if (project?.draftScopeJson) {
+      try {
+        setActiveDraft(JSON.parse(project.draftScopeJson));
+      } catch {
+        // ignore
+      }
+    }
+    setDraftReturnScreen('overview');
+    navigateToSubScreen('draft', 'forward');
+  };
+
+  const handleCreateScopeDraft = async (data: {
+    projectName: string;
+    projectField: string;
+    conversation: string;
+  }) => {
+    if (!services) return;
+
+    // Fast brief extraction (local LLM or instant heuristic fallback)
+    let extractedDraft: ScopeDraft;
+    try {
+      extractedDraft = await services.services.briefCraft.extractBrief(
+        data.conversation,
+        data.projectName,
+      );
+      extractedDraft.title = data.projectName;
+    } catch {
+      extractedDraft = services.services.briefCraft.extractBriefHeuristic(
+        data.conversation,
+        data.projectName,
+      );
+    }
+
+    // Persist project with draftScopeJson in SQLite
+    const newProjId = `proj_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const newProj = await services.repositories.project.create({
+      id: newProjId,
+      title: data.projectName,
+      clientName: data.projectName,
+      description: data.projectField,
+      draftScopeJson: JSON.stringify(extractedDraft),
+    });
+
+    setProjects((prev) => [newProj, ...prev]);
+    setSelectedProjectId(newProjId);
+    setActiveDraft(extractedDraft);
+    setDraftReturnScreen('new_project');
+    navigateToSubScreen('draft', 'forward');
+  };
+
+  const handleConfirmScope = async (draftToConfirm: ScopeDraft) => {
+    if (!services || !activeProject) return;
+    try {
+      // Update draftScopeJson in SQLite
+      await services.repositories.project.update(activeProject.id, {
+        draftScopeJson: JSON.stringify(draftToConfirm),
+      });
+
+      const newAgmt = await services.services.kasunduanVault.confirmScope(
+        activeProject.id,
+        draftToConfirm,
+      );
+      setProjectAgreements((prev) => ({
+        ...prev,
+        [activeProject.id]: [newAgmt, ...(prev[activeProject.id] || [])],
+      }));
+      setSelectedAgreement(newAgmt);
+      navigateToSubScreen('overview', 'forward');
+    } catch {
+      navigateToSubScreen('overview', 'forward');
+    }
+  };
+
+  const handleAnalyzeRequest = async (requestText: string) => {
+    if (!services || !activeProject) return;
+
+    try {
+      const targetAgreement = activeAgreement || activeAgreements[0];
+      if (!targetAgreement) return;
+
+      const newAnalysis = await services.services.scopeGuard.analyzeRequest({
+        projectId: activeProject.id,
+        agreementId: targetAgreement.id,
+        requestText,
+      });
+      setAnalysis(newAnalysis);
+
+      // Generate proposal draft
+      const newProposal = await services.services.changeDesk.draftProposal({
+        projectId: activeProject.id,
+        analysisId: newAnalysis.id,
+        selectedItems: newAnalysis.findings
+          .filter((f) => f.classification === 'potential_additional')
+          .map((f) => f.item),
+        freelancerFeeEstimate: 7000,
+        freelancerDaysEstimate: 5,
+        currency: targetAgreement.budgetCurrency || 'PHP',
+      });
+      setProposal(newProposal);
+
+      navigateToSubScreen('review', 'forward');
+    } catch {
+      // Offline fallback
+      navigateToSubScreen('review', 'forward');
+    }
+  };
+
+  const handleDataReset = async () => {
+    try {
+      const db = await getDatabaseAsync();
+      await seedDemoDataAsync(db, true);
+    } catch {
+      // ignore
+    }
+    await refreshData();
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.loadingScreen}>
+        <ActivityIndicator size="large" color={colors.primary} />
+        <Text style={styles.loadingText}>Loading Saklaw workspace...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView style={styles.errorScreen}>
+        <Text style={styles.errorTitle}>Failed to initialize</Text>
+        <Text style={styles.errorText}>{error}</Text>
+      </SafeAreaView>
+    );
+  }
+
   return (
-    <SafeAreaView style={styles.screen}>
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <View style={styles.header}>
-          <Text accessibilityRole="header" style={styles.title}>
-            Saklaw
-          </Text>
-          <Text style={styles.tagline}>
-            Clear agreements. Controlled revisions. Confident freelancing.
-          </Text>
-        </View>
+    <SafeAreaView style={styles.safeArea}>
+      {/* Viewport for Sub-Screens or Root Tabs */}
+      <View style={styles.contentViewport}>
+        <SlideTransition
+          activeKey={subScreen ?? 'root'}
+          direction={stackDirection}
+          duration={280}
+          style={styles.contentViewport}
+        >
+          {/* Sub-screens (Focused Module Flows) */}
+          {subScreen === 'new_project' && (
+            <NewProjectScreen
+              onBack={() => navigateToSubScreen(null, 'backward')}
+              onCreateScopeDraft={handleCreateScopeDraft}
+            />
+          )}
 
-        {loading ? (
-          <View style={styles.card}>
-            <ActivityIndicator size="small" color="#2b6cb0" />
-            <Text style={styles.cardText}>Initializing SQLite database and backend services...</Text>
-          </View>
-        ) : error ? (
-          <View style={[styles.card, styles.errorCard]}>
-            <Text style={styles.errorTitle}>Backend initialization notice</Text>
-            <Text style={styles.cardText}>{error}</Text>
-          </View>
-        ) : (
-          <>
-            <View style={styles.card}>
-              <Text style={styles.cardHeader}>Backend diagnostics and status</Text>
+          {subScreen === 'draft' && (
+            <ScopeDraftScreen
+              project={activeProject}
+              draft={activeDraft || defaultDraft}
+              onBack={() => navigateToSubScreen(draftReturnScreen, 'backward')}
+              onConfirmScope={handleConfirmScope}
+            />
+          )}
 
-              <View style={styles.statusRow}>
-                <Text style={styles.statusLabel}>SQLite database:</Text>
-                <Text style={styles.statusValueSuccess}>Connected (WAL Mode)</Text>
-              </View>
+          {subScreen === 'overview' && (
+            <ProjectOverviewScreen
+              currentProject={activeProject}
+              allProjects={projects}
+              agreements={activeAgreements}
+              selectedAgreement={activeAgreement}
+              onSelectProject={(id) => {
+                setSelectedProjectId(id);
+                const agmts = projectAgreements[id] || [];
+                setSelectedAgreement(agmts[0] || null);
+              }}
+              onSelectAgreementVersion={handleSelectAgreementVersion}
+              onNavigateToNewRequest={() => navigateToSubScreen('new_request', 'forward')}
+              onBack={() => navigateToSubScreen(null, 'backward')}
+              onReleaseScope={() => handleReleaseProjectScope(activeProject.id)}
+              onEditScopeDraft={() => handleEditProjectDraft(activeProject.id)}
+            />
+          )}
 
-              <View style={styles.statusRow}>
-                <Text style={styles.statusLabel}>Projects loaded:</Text>
-                <Text style={styles.statusValue}>{projects.length} project(s)</Text>
-              </View>
+          {subScreen === 'new_request' && (
+            <NewRequestScreen
+              project={activeProject}
+              agreement={activeAgreement}
+              onBack={() => navigateToSubScreen('overview', 'backward')}
+              onAnalyze={handleAnalyzeRequest}
+              onViewConfirmedScope={() => navigateToSubScreen('overview', 'backward')}
+            />
+          )}
 
-              {projects.length > 0 && (
-                <View style={styles.projectInfo}>
-                  <Text style={styles.projectTitle}>{projects[0].title}</Text>
-                  <Text style={styles.clientLabel}>Client: {projects[0].clientName || 'N/A'}</Text>
-                </View>
-              )}
+          {subScreen === 'review' && (
+            <ScopeReviewScreen
+              project={activeProject}
+              agreement={activeAgreement}
+              analysis={
+                analysis || {
+                  id: 'ana_fallback',
+                  requestId: 'req_fallback',
+                  agreementId: activeAgreement?.id || 'agmt_demo',
+                  classification: 'potential_additional',
+                  summary: 'Compared with Agreement v2. You decide what belongs in scope.',
+                  findings: [
+                    {
+                      item: 'Customer accounts',
+                      classification: 'potential_additional',
+                      explanation: 'An account system is not listed in the recorded deliverables.',
+                      evidenceRequirementIds: ['REQ-01', 'REQ-02'],
+                    },
+                    {
+                      item: 'Appointment booking',
+                      classification: 'potential_additional',
+                      explanation: 'The agreed pages and enquiry form do not describe booking functionality.',
+                      evidenceRequirementIds: ['REQ-01', 'REQ-02'],
+                    },
+                    {
+                      item: 'Contact form colour update',
+                      classification: 'included',
+                      explanation: 'Fits the agreed contact form and revision terms. Confirm a revision round is available.',
+                      evidenceRequirementIds: ['REQ-02', 'REQ-03'],
+                    },
+                    {
+                      item: '“Make it feel more premium”',
+                      classification: 'needs_clarification',
+                      explanation: 'Which pages or visual details should change? Ask for examples before classifying.',
+                      evidenceRequirementIds: ['REQ-01', 'REQ-03'],
+                    },
+                  ],
+                  clarificationQuestions: [
+                    'Which pages or visual details should change? Ask for examples before classifying.',
+                  ],
+                  createdAt: new Date().toISOString(),
+                }
+              }
+              onBack={() => navigateToSubScreen('new_request', 'backward')}
+              onProceedToProposal={() => navigateToSubScreen('proposal', 'forward')}
+            />
+          )}
 
-              {latestAgreement && (
-                <View style={styles.statusRow}>
-                  <Text style={styles.statusLabel}>Kasunduan vault:</Text>
-                  <Text style={styles.statusValue}>
-                    {latestAgreement.title} ({latestAgreement.requirements.length} requirements, {latestAgreement.budgetCurrency} {latestAgreement.budgetAmount?.toLocaleString()})
-                  </Text>
-                </View>
-              )}
+          {subScreen === 'proposal' && (
+            <ProposalScreen
+              project={activeProject}
+              agreement={activeAgreement}
+              proposal={
+                proposal || {
+                  id: 'prop_fallback',
+                  projectId: activeProject.id,
+                  analysisId: 'ana_fallback',
+                  selectedItems: ['Customer accounts', 'Appointment booking'],
+                  freelancerFeeEstimate: null,
+                  freelancerDaysEstimate: null,
+                  currency: 'PHP',
+                  draftMessage:
+                    "Hi! Thanks for sharing the updates. Customer accounts and appointment booking would add to the pages and contact form in our current scope. Please review this proposed change and let me know if you would like to proceed. I'll record your approval before starting the additional work.",
+                  status: 'draft',
+                  createdAt: new Date().toISOString(),
+                  updatedAt: new Date().toISOString(),
+                }
+              }
+              availableItems={
+                analysis
+                  ? analysis.findings
+                      .filter((f) => f.classification === 'potential_additional')
+                      .map((f) => f.item)
+                  : ['Customer accounts', 'Appointment booking']
+              }
+              onBack={() => navigateToSubScreen('review', 'backward')}
+              onSaveProposal={async (updatedProp) => {
+                if (services) {
+                  try {
+                    const existing = await services.repositories.proposal.getById(updatedProp.id);
+                    if (existing) {
+                      await services.repositories.proposal.update(updatedProp.id, {
+                        draftMessage: updatedProp.draftMessage,
+                        freelancerFeeEstimate: updatedProp.freelancerFeeEstimate,
+                        freelancerDaysEstimate: updatedProp.freelancerDaysEstimate,
+                        status: updatedProp.status,
+                      });
+                    } else {
+                      await services.repositories.proposal.create(updatedProp);
+                    }
+                  } catch {
+                    // Fallback update in state
+                  }
+                }
+                setProposal(updatedProp);
+              }}
+            />
+          )}
 
-              <View style={styles.statusRow}>
-                <Text style={styles.statusLabel}>LM Studio status:</Text>
-                <Text style={lmStudioAvailable ? styles.statusValueSuccess : styles.statusValueWarning}>
-                  {lmStudioAvailable ? 'Server reachable' : 'Standby (Start LM Studio server on port 1234)'}
-                </Text>
-              </View>
-            </View>
-
-            {latestAgreement && contractPreview && (
-              <View style={styles.card}>
-                <Text style={styles.cardHeader}>Auto-generated legal contract</Text>
-                <Text style={styles.subText}>
-                  Compliant with Philippine commercial law, Ease of Paying Taxes (RA 11976), BIR Form 2307 withholding rules, RA 8293 (IP Code), and RA 10173 (Data Privacy).
-                </Text>
-
-                <View style={styles.badgeContainer}>
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>EOPT RA 11976</Text>
-                  </View>
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>BIR Form 2307</Text>
-                  </View>
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>RA 8293 IP Code</Text>
-                  </View>
-                  <View style={styles.badge}>
-                    <Text style={styles.badgeText}>RA 10173 Privacy</Text>
-                  </View>
-                </View>
-
-                <View style={styles.buttonRow}>
-                  <Pressable
-                    style={styles.primaryButton}
-                    onPress={handleShareContract}
-                    accessibilityRole="button"
-                    accessibilityLabel="Share contract via native share sheet"
-                  >
-                    <Text style={styles.primaryButtonText}>Share contract (Native sheet)</Text>
-                  </Pressable>
-
-                  <Pressable
-                    style={styles.secondaryButton}
-                    onPress={() => setShowFullContract(!showFullContract)}
-                    accessibilityRole="button"
-                    accessibilityLabel="Toggle contract text preview"
-                  >
-                    <Text style={styles.secondaryButtonText}>
-                      {showFullContract ? 'Hide full text' : 'View full text'}
-                    </Text>
-                  </Pressable>
-                </View>
-
-                {shareFeedback && (
-                  <Text style={styles.feedbackText}>{shareFeedback}</Text>
+          {/* Root Tabs (When not in a sub-screen) */}
+          {subScreen === null && (
+            <View style={styles.rootTabsWrapper}>
+              <SlideTransition
+                activeKey={rootTab}
+                direction={tabDirection}
+                duration={250}
+                style={styles.tabContentArea}
+              >
+                {rootTab === 'projects' && (
+                  <ProjectsScreen
+                    projects={projects}
+                    projectAgreements={projectAgreements}
+                    onSelectProject={handleSelectProject}
+                    onViewProjectOverview={handleViewProjectOverview}
+                    onNewProject={() => navigateToSubScreen('new_project', 'forward')}
+                    onReleaseProject={handleReleaseProjectScope}
+                  />
                 )}
 
-                <View style={styles.previewBox}>
-                  <Text
-                    style={styles.previewText}
-                    numberOfLines={showFullContract ? undefined : 14}
-                  >
-                    {contractPreview}
-                  </Text>
-                </View>
-              </View>
-            )}
-          </>
-        )}
-      </ScrollView>
+                {rootTab === 'agreements' && (
+                  <AgreementsScreen
+                    projects={projects}
+                    projectAgreements={projectAgreements}
+                    onSelectProjectAgreement={handleSelectProjectAgreementFromVault}
+                    onNewProject={() => navigateToSubScreen('new_project', 'forward')}
+                  />
+                )}
+
+                {rootTab === 'settings' && (
+                  <SettingsScreen
+                    services={services}
+                    onDataReset={handleDataReset}
+                  />
+                )}
+              </SlideTransition>
+
+              {/* Bottom Tab Bar matching Mockup */}
+              <BottomNavBar
+                activeTab={rootTab}
+                onSelectTab={handleSelectTab}
+              />
+            </View>
+          )}
+        </SlideTransition>
+      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: {
+  safeArea: {
     flex: 1,
-    backgroundColor: '#f5f6fa',
+    backgroundColor: colors.background,
   },
-  scrollContent: {
+  loadingScreen: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: 12,
+  },
+  loadingText: {
+    fontSize: 14,
+    color: colors.textSecondary,
+  },
+  errorScreen: {
+    flex: 1,
+    backgroundColor: colors.background,
+    justifyContent: 'center',
+    alignItems: 'center',
     padding: 24,
-    maxWidth: 720,
-    width: '100%',
-    alignSelf: 'center',
-    gap: 16,
-  },
-  header: {
-    marginBottom: 8,
-    gap: 6,
-  },
-  title: {
-    fontSize: 32,
-    fontWeight: '800',
-    color: '#182135',
-  },
-  tagline: {
-    fontSize: 16,
-    color: '#49556b',
-    lineHeight: 24,
-  },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 20,
-    borderWidth: 1,
-    borderColor: '#e2e8f0',
-    gap: 14,
-  },
-  errorCard: {
-    borderColor: '#feb2b2',
-    backgroundColor: '#fff5f5',
+    gap: 12,
   },
   errorTitle: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#c53030',
-  },
-  cardHeader: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1a202c',
-    marginBottom: 4,
+    color: colors.errorText,
   },
-  subText: {
+  errorText: {
     fontSize: 14,
-    color: '#4a5568',
-    lineHeight: 20,
+    color: colors.textSecondary,
+    textAlign: 'center',
   },
-  cardText: {
-    fontSize: 15,
-    color: '#4a5568',
+  contentViewport: {
+    flex: 1,
+    backgroundColor: colors.background,
   },
-  statusRow: {
-    flexDirection: 'column',
-    gap: 4,
-    paddingVertical: 6,
-    borderBottomWidth: 1,
-    borderBottomColor: '#edf2f7',
+  rootTabsWrapper: {
+    flex: 1,
+    backgroundColor: colors.background,
   },
-  statusLabel: {
-    fontSize: 13,
-    fontWeight: '600',
-    color: '#718096',
-    textTransform: 'uppercase',
-  },
-  statusValue: {
-    fontSize: 15,
-    color: '#2d3748',
-  },
-  statusValueSuccess: {
-    fontSize: 15,
-    color: '#2f855a',
-    fontWeight: '600',
-  },
-  statusValueWarning: {
-    fontSize: 15,
-    color: '#d69e2e',
-    fontWeight: '500',
-  },
-  projectInfo: {
-    backgroundColor: '#f7fafc',
-    padding: 12,
-    borderRadius: 8,
-    gap: 4,
-  },
-  projectTitle: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#2b6cb0',
-  },
-  clientLabel: {
-    fontSize: 13,
-    color: '#718096',
-  },
-  badgeContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  badge: {
-    backgroundColor: '#ebf8ff',
-    borderColor: '#bee3f8',
-    borderWidth: 1,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    borderRadius: 6,
-  },
-  badgeText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#2b6cb0',
-  },
-  buttonRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
-    marginTop: 4,
-  },
-  primaryButton: {
-    backgroundColor: '#2b6cb0',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  primaryButtonText: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  secondaryButton: {
-    backgroundColor: '#edf2f7',
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    borderRadius: 8,
-    alignItems: 'center',
-  },
-  secondaryButtonText: {
-    color: '#2d3748',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  feedbackText: {
-    fontSize: 13,
-    color: '#2f855a',
-    fontStyle: 'italic',
-  },
-  previewBox: {
-    backgroundColor: '#1a202c',
-    padding: 14,
-    borderRadius: 8,
-  },
-  previewText: {
-    fontFamily: 'monospace',
-    fontSize: 12,
-    color: '#e2e8f0',
-    lineHeight: 18,
+  tabContentArea: {
+    flex: 1,
+    backgroundColor: colors.background,
   },
 });
