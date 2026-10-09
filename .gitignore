@@ -29,3 +29,8 @@ local-ai/backend/__pycache__/
 # Python caches
 __pycache__/
 .superpowers/
+
+# Locally installed Remotion skills and agent links
+/.agents/skills/remotion-*/
+/.claude/skills/remotion-*
+/agent/skills/remotion-*/
