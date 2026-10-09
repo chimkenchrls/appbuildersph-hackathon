@@ -27,13 +27,18 @@ export function createBackendAi(getPorts: () => Promise<BackendPorts>): SaklawAi
   const setAvailable = (value: boolean) => {
     if (available !== value) { available = value; emit(); }
   };
+  let missedChecks = 0;
   const checkAvailability = async () => {
     if (running > 0) return;
+    let reachable = false;
     try {
-      setAvailable(await (await getPorts()).engine.isAvailable());
+      reachable = await (await getPorts()).engine.isAvailable();
     } catch {
-      setAvailable(false);
+      reachable = false;
     }
+    missedChecks = reachable ? 0 : missedChecks + 1;
+    // One slow reply on weak Wi-Fi is not an outage: report unavailable after two misses in a row.
+    if (reachable || missedChecks >= 2 || available === null) setAvailable(reachable);
   };
 
   function toAiError(error: unknown): ServiceError {

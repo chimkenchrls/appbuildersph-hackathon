@@ -14,7 +14,7 @@ export class LMStudioAdapter implements LLMEngine {
   private readonly getModel: () => Promise<string>;
 
   constructor(config: LMStudioAdapterConfig = {}) {
-    this.timeoutMs = config.timeoutMs ?? 60000;
+    this.timeoutMs = config.timeoutMs ?? 120000;
 
     const defaultUrl = Platform.OS === 'android' ? 'http://10.0.2.2:1234/v1' : 'http://localhost:1234/v1';
 
@@ -26,7 +26,7 @@ export class LMStudioAdapter implements LLMEngine {
     try {
       const baseUrl = await this.getBaseUrl();
       const controller = new AbortController();
-      const timer = setTimeout(() => controller.abort(), 3000);
+      const timer = setTimeout(() => controller.abort(), 6000);
 
       const response = await fetch(`${baseUrl}/models`, {
         method: 'GET',
