@@ -4,12 +4,13 @@
     "slug": "diligent-dev",
     "scheme": "diligent-dev",
     "version": "1.0.0",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "experiments": {
       "typedRoutes": true
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.diligentdev.app"
     },
     "android": {
       "package": "com.saklaw.dds"
@@ -24,7 +25,16 @@
       "expo-sqlite",
       "llama.rn",
       "@react-native-vector-icons/lucide",
-      ["expo-build-properties", { "android": { "usesCleartextTraffic": true } }]
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      "expo-font",
+      "expo-sharing"
     ],
     "extra": {
       "router": {},

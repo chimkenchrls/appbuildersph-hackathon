@@ -13,6 +13,9 @@ export const ClassificationSchema = z.enum(['included', 'potential_additional', 
 export const ProjectSchema = z.object({
   id, title: nonempty(limits.name), clientName: text(limits.item).nullable(), description: text(limits.source).nullable(),
   createdAt: date, updatedAt: date,
+  draftScopeJson: z.string().max(200000).refine(value => {
+    try { return PersistedDraftSchema.safeParse(JSON.parse(value)).success; } catch { return false; }
+  }).nullable().optional(),
 }).strict();
 export const AgreementSchema = z.object({
   id, projectId: id, versionNumber: z.number().int().min(1).max(1e6), title: nonempty(limits.item),
@@ -25,6 +28,11 @@ export const AgreementSchema = z.object({
   taxTreatment: z.enum(['net_of_withholding', 'inclusive', 'subject_to_2307', 'none_specified']).default('net_of_withholding'),
   confirmedAt: date,
 }).strict();
+// Same field limits as confirmed agreements, while allowing an unfinished empty draft.
+export const PersistedDraftSchema = AgreementSchema.omit({ id: true, projectId: true, versionNumber: true, confirmedAt: true }).extend({
+  requirements: z.array(AgreementSchema.shape.requirements.element).max(limits.items + 1)
+    .refine(rows => new Set(rows.map(row => row.id)).size === rows.length),
+});
 export const RequestSchema = z.object({ id, projectId: id, agreementId: id, rawText: nonempty(limits.request), createdAt: date }).strict();
 export const AnalysisSchema = z.object({
   id, requestId: id, agreementId: id, classification: ClassificationSchema, summary: text(limits.message),

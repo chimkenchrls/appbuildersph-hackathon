@@ -1,4 +1,6 @@
 import { Share } from 'react-native';
+import * as Print from 'expo-print';
+import * as Sharing from 'expo-sharing';
 import type { ChangeProposal, Agreement, ContractOptions } from '@/types/domain';
 import { ContractGeneratorService } from './contractGeneratorService';
 
@@ -82,5 +84,40 @@ Confirmed Date: ${new Date(agreement.confirmedAt).toLocaleDateString()}
     } catch {
       return false;
     }
+  }
+
+  /**
+   * Generates a formal, printable PDF contract via expo-print and opens
+   * the native file sharing sheet via expo-sharing (or invokes system print dialog).
+   */
+  static async shareContractPdf(agreement: Agreement, options?: ContractOptions): Promise<boolean> {
+    try {
+      const html = ContractGeneratorService.generateContractHtml(agreement, options);
+      const isSharingAvailable = await Sharing.isAvailableAsync();
+
+      if (isSharingAvailable) {
+        const { uri } = await Print.printToFileAsync({ html });
+        await Sharing.shareAsync(uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: `Share Agreement PDF - ${agreement.title}`,
+          UTI: 'com.adobe.pdf',
+        });
+        return true;
+      } else {
+        // Fallback for web or platforms where file sharing sheet is unavailable
+        await Print.printAsync({ html });
+        return true;
+      }
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  /**
+   * Directly prints or saves contract to PDF using device print services.
+   */
+  static async printContract(agreement: Agreement, options?: ContractOptions): Promise<void> {
+    const html = ContractGeneratorService.generateContractHtml(agreement, options);
+    await Print.printAsync({ html });
   }
 }

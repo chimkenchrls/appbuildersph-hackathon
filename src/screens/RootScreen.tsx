@@ -1,6 +1,8 @@
+import { HomeScreen } from './HomeScreen';
 import DashboardScreen from './DashboardScreen';
+import { isFixtureData } from '@/services/active';
 
-/** Native entry: the project list. The web sibling renders the landing placeholder. */
+/** Native workspace. The web sibling preserves the existing landing page. */
 export default function RootScreen() {
-  return <DashboardScreen />;
+  return isFixtureData ? <DashboardScreen /> : <HomeScreen />;
 }

@@ -1,3 +1,4 @@
+import { withKeepAwake } from '@/utils/keepAwake';
 import { Platform } from 'react-native';
 import type { LLMEngine, LLMMessage, GenerationOptions } from '../contracts';
 import { LLMEngineUnavailableError, LLMGenerationTimeoutError } from '../contracts';
@@ -47,6 +48,10 @@ export class LMStudioAdapter implements LLMEngine {
   }
 
   async generate(messages: LLMMessage[], options: GenerationOptions = {}): Promise<string> {
+    return withKeepAwake(() => this.generateResponse(messages, options));
+  }
+
+  private async generateResponse(messages: LLMMessage[], options: GenerationOptions): Promise<string> {
     const baseUrl = await this.getBaseUrl();
     const model = await this.getModel();
 

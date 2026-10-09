@@ -174,6 +174,8 @@ npx eas-cli@latest build --platform android --profile preview
 npx eas-cli@latest build --platform android --profile apk
 ```
 
-Both profiles output standalone `.apk` packages that install directly on physical Android hardware for 100% offline use.
+Both profiles output standalone `.apk` packages for physical Android installation. Offline inference and standalone APK acceptance still require device verification.
 
 Persistence repairs are documented in [the 2026-10-10 repair note](docs/superpowers/PERSISTENCE-REPAIR-2026-10-10.md), including migration compatibility and the team's device checklist. Related screen saves now commit atomically, confirmed clauses are protected, and new proposal days must be whole numbers. Money remains in main units pending a separate centavo migration. Existing fractional days are kept; explicitly correct them before resaving or exporting that project. Native upgrade/relaunch and standalone APK acceptance still require team testing.
+
+The staging mobile UI integration is recorded in [the integration decision](docs/decisions/2026-10-10-staging-integration.md). It keeps the existing web landing page, APK identity and validated backend; new native dependencies require a development/APK rebuild.

@@ -5,11 +5,12 @@ import type { Project } from '@/types/domain';
 export class ProjectRepository {
   constructor(private readonly db: SQLiteDatabase) {}
 
-  async create(data: { id: string; title: string; clientName?: string | null; description?: string | null }): Promise<Project> {
+  async create(data: { id: string; title: string; clientName?: string | null; description?: string | null; draftScopeJson?: string | null }): Promise<Project> {
     const now = new Date().toISOString();
     return this.restore({
       id: data.id, title: data.title.trim(), clientName: data.clientName?.trim() ?? null,
-      description: data.description?.trim() ?? null, createdAt: now, updatedAt: now,
+      description: data.description?.trim() ?? null,
+      ...(data.draftScopeJson != null ? { draftScopeJson: data.draftScopeJson } : {}), createdAt: now, updatedAt: now,
     });
   }
 
@@ -17,8 +18,8 @@ export class ProjectRepository {
   async restore(project: Project): Promise<Project> {
     project = ProjectSchema.parse(project);
     await this.db.runAsync(
-      'INSERT INTO projects (id, title, client_name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?);',
-      [project.id, project.title, project.clientName, project.description, project.createdAt, project.updatedAt],
+      'INSERT INTO projects (id, title, client_name, description, created_at, updated_at, draft_scope_json) VALUES (?, ?, ?, ?, ?, ?, ?);',
+      [project.id, project.title, project.clientName, project.description, project.createdAt, project.updatedAt, project.draftScopeJson ?? null],
     );
     return project;
   }
@@ -31,7 +32,8 @@ export class ProjectRepository {
       description: string | null;
       created_at: string;
       updated_at: string;
-    }>('SELECT id, title, client_name, description, created_at, updated_at FROM projects ORDER BY updated_at DESC;');
+      draft_scope_json: string | null;
+    }>('SELECT id, title, client_name, description, created_at, updated_at, draft_scope_json FROM projects ORDER BY updated_at DESC;');
 
     return rows.map((r) => stored(ProjectSchema, {
       id: r.id,
@@ -40,6 +42,7 @@ export class ProjectRepository {
       description: r.description,
       createdAt: r.created_at,
       updatedAt: r.updated_at,
+      ...(r.draft_scope_json != null ? { draftScopeJson: r.draft_scope_json } : {}),
     }));
   }
 
@@ -51,7 +54,8 @@ export class ProjectRepository {
       description: string | null;
       created_at: string;
       updated_at: string;
-    }>('SELECT id, title, client_name, description, created_at, updated_at FROM projects WHERE id = ?;', [id]);
+      draft_scope_json: string | null;
+    }>('SELECT id, title, client_name, description, created_at, updated_at, draft_scope_json FROM projects WHERE id = ?;', [id]);
 
     if (!row) return null;
 
@@ -62,10 +66,11 @@ export class ProjectRepository {
       description: row.description,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+      ...(row.draft_scope_json != null ? { draftScopeJson: row.draft_scope_json } : {}),
     });
   }
 
-  async update(id: string, updates: { title?: string; clientName?: string | null; description?: string | null }): Promise<Project | null> {
+  async update(id: string, updates: { title?: string; clientName?: string | null; description?: string | null; draftScopeJson?: string | null }): Promise<Project | null> {
     const existing = await this.getById(id);
     if (!existing) return null;
 
@@ -74,10 +79,12 @@ export class ProjectRepository {
     const clientName = updates.clientName !== undefined ? (updates.clientName?.trim() ?? null) : existing.clientName;
     const description = updates.description !== undefined ? (updates.description?.trim() ?? null) : existing.description;
 
-    const next = ProjectSchema.parse({ id, title, clientName, description, createdAt: existing.createdAt, updatedAt: now });
+    const draftScopeJson = updates.draftScopeJson !== undefined ? updates.draftScopeJson : existing.draftScopeJson;
+    const next = ProjectSchema.parse({ id, title, clientName, description, createdAt: existing.createdAt, updatedAt: now,
+      ...(draftScopeJson != null ? { draftScopeJson } : {}) });
     await this.db.runAsync(
-      `UPDATE projects SET title = ?, client_name = ?, description = ?, updated_at = ? WHERE id = ?;`,
-      [title, clientName, description, now, id],
+      `UPDATE projects SET title = ?, client_name = ?, description = ?, updated_at = ?, draft_scope_json = ? WHERE id = ?;`,
+      [title, clientName, description, now, draftScopeJson ?? null, id],
     );
 
     return next;

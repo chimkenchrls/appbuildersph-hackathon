@@ -411,3 +411,23 @@ For each handoff, state what changed, checks actually run, remaining integration
 gaps, and device verification still needed. Never equate a passing web export
 with native correctness. Discuss scope/navigation/dependency changes before
 implementing them; routine decisions within this document need no repeated approval.
+
+## Staging integration decisions (2026-10-10)
+
+The owner approved staging's light native workspace, with Projects, Agreements and Settings
+root tabs and focused project flows. Native screens use the staging theme (white canvas,
+`#4D8B8B` primary and `#1E1E1E` text). This supersedes earlier native dark-theme and
+no-tab requirements. The existing dark Mint Teal web landing page stays unchanged.
+
+Expo Router owns navigation, including the native root's validated query parameters.
+Existing project routes and web redirects remain compatible. The fixture flag still
+opens the existing labelled fixture dashboard; the new screens use SQLite.
+
+Staging's contract PDF/share controls are included, with local Expo print/sharing
+modules. Contract wording remains a draft for review, not verified legal compliance.
+Silent heuristic AI fallbacks and invented terms are excluded. Missing terms stay
+unspecified, estimates come from the freelancer, and save/AI failures remain visible.
+The settings sample reset is disabled to protect immutable records.
+
+The Android package remains `com.saklaw.dds`, and the existing EAS link and APK
+profiles are preserved. Rebuild native clients after these dependency changes.

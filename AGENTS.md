@@ -26,7 +26,8 @@ The checked-in starter currently has:
 - Node.js 22 (`>=22.13.0 <23`) and npm with a committed `package-lock.json`.
 - `expo-router/entry` as the entry point; thin routes under `src/app/` render screens
   from `src/screens/`.
-- Safe-area support and Metro web bundling.
+- Safe-area support and Metro web bundling. The native workspace uses the staging light UI; the web landing retains its dark palette.
+- Staging screen integration and migration-3 compatibility are recorded in `docs/decisions/2026-10-10-staging-integration.md`.
 - EAS `development`, `preview`, and `apk` profiles, plus a `production` profile for
   future store builds. `preview` and `apk` explicitly produce Android APKs.
 - Lint, type checking, Jest tests, Expo dependency checks, and web export in CI.

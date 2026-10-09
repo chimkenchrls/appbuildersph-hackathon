@@ -170,4 +170,410 @@ Printed Name: ${freelancerName}
 Date: _________________________________________
 `;
   }
+
+  /**
+   * Generates a beautifully styled, print-ready HTML document suitable
+   * for converting into a professional PDF via expo-print.
+   */
+  static generateContractHtml(agreement: Agreement, options: ContractOptions = {}): string {
+    const {
+      freelancerName = 'Independent Contractor',
+      freelancerTin = 'N/A',
+      freelancerAddress = '',
+      clientName = 'Client',
+      clientTin = 'N/A',
+      clientAddress = '',
+      taxTreatment = agreement.taxTreatment || 'net_of_withholding',
+      paymentMethod = 'Bank Transfer / Digital Wallet',
+    } = options;
+
+    const escape = (text: string) =>
+      text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+
+    const formattedDate = new Date(agreement.confirmedAt).toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    const feeText =
+      agreement.budgetAmount != null
+        ? `${escape(agreement.budgetCurrency)} ${agreement.budgetAmount.toLocaleString()}`
+        : 'To be determined';
+
+    const timelineText =
+      agreement.durationDays != null
+        ? `${agreement.durationDays} business days`
+        : agreement.deadline
+          ? `Deadline: ${escape(agreement.deadline)}`
+          : 'As mutually scheduled';
+
+    let taxDescription = '';
+    switch (taxTreatment) {
+      case 'net_of_withholding':
+        taxDescription =
+          'Net of Withholding: All quoted fees are net of creditable withholding tax. If withholding applies under BIR regulations, Client shall provide a certified BIR Form 2307 upon payment.';
+        break;
+      case 'subject_to_2307':
+        taxDescription =
+          'Subject to BIR 2307: Expanded withholding tax (5% or 10%) applies with certified BIR Form 2307 issued to Freelancer at payment.';
+        break;
+      case 'inclusive':
+        taxDescription =
+          'Tax Inclusive: Compensation is inclusive of all local taxes payable by the Freelancer.';
+        break;
+      case 'none_specified':
+      default:
+        taxDescription =
+          'Payable in full without deductions. Each party remains independently responsible for respective tax liabilities.';
+        break;
+    }
+
+    const deliverablesHtml = agreement.requirements
+      .map(
+        (r, idx) => `
+        <div class="deliverable-item">
+          <div class="deliverable-header">
+            <span class="deliverable-num">${idx + 1}</span>
+            <span class="deliverable-badge">${escape(r.id)}</span>
+            <span class="deliverable-title">${escape(r.title)}</span>
+          </div>
+          <p class="deliverable-desc">${escape(r.description || 'Deliverable according to project specifications.')}</p>
+        </div>`,
+      )
+      .join('');
+
+    const exclusionsHtml =
+      agreement.exclusions.length > 0
+        ? agreement.exclusions
+            .map((e) => `<li class="exclusion-item">${escape(e)}</li>`)
+            .join('')
+        : '<li class="exclusion-item">No exclusions explicitly recorded at signing.</li>';
+
+    return `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Service Agreement - ${escape(agreement.title)}</title>
+  <style>
+    @page {
+      margin: 18mm 16mm;
+      size: letter;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      color: #1A1A1A;
+      line-height: 1.5;
+      font-size: 13px;
+      margin: 0;
+      padding: 0;
+      background: #FFFFFF;
+    }
+    .container {
+      max-width: 800px;
+      margin: 0 auto;
+    }
+    .header-bar {
+      border-bottom: 2px solid #1A1A1A;
+      padding-bottom: 14px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+    }
+    .doc-eyebrow {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: #6B7280;
+      margin-bottom: 4px;
+    }
+    .doc-title {
+      font-size: 22px;
+      font-weight: 800;
+      color: #1A1A1A;
+      margin: 0;
+      letter-spacing: -0.5px;
+    }
+    .header-meta {
+      text-align: right;
+      font-size: 11px;
+      color: #4B5563;
+    }
+    .version-tag {
+      display: inline-block;
+      background: #E5E7EB;
+      color: #1A1A1A;
+      font-weight: 700;
+      font-size: 10px;
+      padding: 2px 8px;
+      border-radius: 4px;
+      margin-top: 4px;
+    }
+    .parties-grid {
+      display: flex;
+      gap: 16px;
+      margin-bottom: 22px;
+    }
+    .party-card {
+      flex: 1;
+      border: 1px solid #E5E7EB;
+      border-radius: 8px;
+      padding: 12px 14px;
+      background: #F9FAFB;
+    }
+    .party-role {
+      font-size: 10px;
+      font-weight: 700;
+      color: #6B7280;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 4px;
+    }
+    .party-name {
+      font-size: 14px;
+      font-weight: 700;
+      color: #111827;
+      margin-bottom: 4px;
+    }
+    .party-detail {
+      font-size: 11px;
+      color: #4B5563;
+      margin: 2px 0;
+    }
+    .section-title {
+      font-size: 13px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: #111827;
+      border-bottom: 1px solid #E5E7EB;
+      padding-bottom: 6px;
+      margin: 18px 0 10px 0;
+    }
+    .deliverable-item {
+      border-left: 3px solid #1A1A1A;
+      padding: 6px 0 6px 12px;
+      margin-bottom: 10px;
+    }
+    .deliverable-header {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 3px;
+    }
+    .deliverable-num {
+      font-weight: 700;
+      font-size: 11px;
+      color: #6B7280;
+    }
+    .deliverable-badge {
+      background: #F3F4F6;
+      border: 1px solid #E5E7EB;
+      font-size: 9.5px;
+      font-weight: 700;
+      padding: 1px 6px;
+      border-radius: 4px;
+      color: #374151;
+    }
+    .deliverable-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #111827;
+    }
+    .deliverable-desc {
+      font-size: 12px;
+      color: #4B5563;
+      margin: 0;
+    }
+    .terms-box {
+      background: #F9FAFB;
+      border: 1px solid #E5E7EB;
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 16px;
+    }
+    .terms-row {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 0;
+      font-size: 12px;
+    }
+    .terms-label {
+      color: #6B7280;
+      font-weight: 600;
+    }
+    .terms-value {
+      color: #111827;
+      font-weight: 700;
+    }
+    .tax-clause-text {
+      font-size: 11.5px;
+      color: #374151;
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px dashed #E5E7EB;
+      line-height: 1.4;
+    }
+    .exclusions-box {
+      background: #FFFBEB;
+      border: 1px solid #FDE68A;
+      border-radius: 8px;
+      padding: 12px 14px;
+      margin-bottom: 16px;
+    }
+    .exclusions-box-title {
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #92400E;
+      margin-bottom: 6px;
+    }
+    .exclusions-list {
+      margin: 0;
+      padding-left: 18px;
+      font-size: 11.5px;
+      color: #78350F;
+    }
+    .exclusion-item {
+      margin-bottom: 3px;
+    }
+    .clauses-text {
+      font-size: 11px;
+      color: #4B5563;
+      line-height: 1.45;
+      margin-bottom: 10px;
+    }
+    .signatures-grid {
+      display: flex;
+      gap: 32px;
+      margin-top: 28px;
+      page-break-inside: avoid;
+    }
+    .signature-col {
+      flex: 1;
+      border-top: 1px solid #9CA3AF;
+      padding-top: 8px;
+    }
+    .sign-role {
+      font-size: 10px;
+      font-weight: 700;
+      text-transform: uppercase;
+      color: #6B7280;
+    }
+    .sign-name {
+      font-size: 13px;
+      font-weight: 700;
+      color: #111827;
+      margin-top: 2px;
+    }
+    .sign-line {
+      font-size: 11px;
+      color: #6B7280;
+      margin-top: 12px;
+    }
+    .footer-note {
+      margin-top: 32px;
+      text-align: center;
+      font-size: 10px;
+      color: #9CA3AF;
+      border-top: 1px solid #F3F4F6;
+      padding-top: 8px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header-bar">
+      <div>
+        <div class="doc-eyebrow">Kasunduan Vault · Service Agreement</div>
+        <h1 class="doc-title">${escape(agreement.title)}</h1>
+      </div>
+      <div class="header-meta">
+        <div>Effective: <strong>${escape(formattedDate)}</strong></div>
+        <div class="version-tag">Version ${agreement.versionNumber}.0</div>
+      </div>
+    </div>
+
+    <div class="parties-grid">
+      <div class="party-card">
+        <div class="party-role">Client</div>
+        <div class="party-name">${escape(clientName)}</div>
+        ${clientTin ? `<div class="party-detail">TIN: ${escape(clientTin)}</div>` : ''}
+        ${clientAddress ? `<div class="party-detail">Address: ${escape(clientAddress)}</div>` : ''}
+      </div>
+      <div class="party-card">
+        <div class="party-role">Independent Freelancer</div>
+        <div class="party-name">${escape(freelancerName)}</div>
+        ${freelancerTin ? `<div class="party-detail">TIN: ${escape(freelancerTin)}</div>` : ''}
+        ${freelancerAddress ? `<div class="party-detail">Address: ${escape(freelancerAddress)}</div>` : ''}
+      </div>
+    </div>
+
+    <div class="section-title">1. Agreed Deliverables & Scope</div>
+    ${deliverablesHtml}
+
+    <div class="section-title">2. Financials & Tax Compliance</div>
+    <div class="terms-box">
+      <div class="terms-row">
+        <span class="terms-label">Total Compensation:</span>
+        <span class="terms-value">${feeText}</span>
+      </div>
+      <div class="terms-row">
+        <span class="terms-label">Payment Method:</span>
+        <span class="terms-value">${escape(paymentMethod)}</span>
+      </div>
+      <div class="terms-row">
+        <span class="terms-label">Delivery Timeline:</span>
+        <span class="terms-value">${timelineText}</span>
+      </div>
+      <div class="terms-row">
+        <span class="terms-label">Included Revisions:</span>
+        <span class="terms-value">${escape(agreement.revisionTerms || 'Not recorded')}</span>
+      </div>
+      <div class="tax-clause-text">
+        <strong>Tax Compliance (EOPT Act RA 11976 / BIR):</strong> ${taxDescription}
+      </div>
+    </div>
+
+    <div class="section-title">3. ScopeGuard Exclusions & Change Management</div>
+    <div class="exclusions-box">
+      <div class="exclusions-box-title">Explicitly Excluded from Scope</div>
+      <ul class="exclusions-list">
+        ${exclusionsHtml}
+      </ul>
+    </div>
+    <p class="clauses-text">
+      Any requests outside the specified deliverables require an explicit Change Proposal and fee agreement before commencement. Intellectual property rights transfer upon complete settlement pursuant to RA 8293. Confidentiality is safeguarded pursuant to RA 10173 (Data Privacy Act of 2012).
+    </p>
+
+    <div class="signatures-grid">
+      <div class="signature-col">
+        <div class="sign-role">Confirmed by Client</div>
+        <div class="sign-name">${escape(clientName)}</div>
+        <div class="sign-line">Signature: __________________________</div>
+        <div class="sign-line">Date: _______________________________</div>
+      </div>
+      <div class="signature-col">
+        <div class="sign-role">Confirmed by Freelancer</div>
+        <div class="sign-name">${escape(freelancerName)}</div>
+        <div class="sign-line">Signature: __________________________</div>
+        <div class="sign-line">Date: _______________________________</div>
+      </div>
+    </div>
+
+    <div class="footer-note">
+      Document Ref: ${escape(agreement.id)} · Diligent Dev Kasunduan Vault · Sealed Offline Baseline
+    </div>
+  </div>
+</body>
+</html>`;
+  }
 }

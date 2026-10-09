@@ -389,7 +389,8 @@ const reviewedDraft = (projectId: string) => ({
     const payload = JSON.parse(await new ExportService(source.db).exportProject('proj_demo_website_01'));
     const db = openDatabase();
     await initial.up(db); await tax.up(db);
-    await new ProjectRepository(db).restore(payload.project);
+    await db.runAsync('INSERT INTO projects (id, title, client_name, description, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)',
+      [payload.project.id, payload.project.title, payload.project.clientName, payload.project.description, payload.project.createdAt, payload.project.updatedAt]);
     // Legacy format has no sealed column. Restore raw agreement/requirements through its old schema.
     const a = payload.agreements[0];
     await db.runAsync(`INSERT INTO agreements (id, project_id, version_number, title, budget_amount, budget_currency,
@@ -410,16 +411,54 @@ const reviewedDraft = (projectId: string) => ({
     await migrateAsync(db); await migrateAsync(db);
     expect((await new AgreementRepository(db).getById(a.id))?.budgetAmount).toBe(15000.25);
     expect(await new ProposalRepository(db).getById('legacy-proposal')).toMatchObject({ freelancerFeeEstimate: 7000.5, freelancerDaysEstimate: 1.5, draftMessage: 'Keep this' });
-    expect(await db.getAllAsync('SELECT version FROM schema_migrations ORDER BY version')).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }]);
+    expect(await db.getAllAsync('SELECT version FROM schema_migrations ORDER BY version')).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }]);
+  });
+
+  test.each(['integrity', 'draft'])('upgrades the %s branch migration 3 without losing records', async branch => {
+    const db = openDatabase();
+    try {
+      await initial.up(db); await tax.up(db);
+      const timestamp = '2026-10-09T00:00:00.000Z';
+      await db.runAsync('INSERT INTO projects (id, title, created_at, updated_at) VALUES (?, ?, ?, ?)', ['keep', 'Keep', timestamp, timestamp]);
+      if (branch === 'integrity') await integrity.up(db);
+      else await db.execAsync('ALTER TABLE projects ADD COLUMN draft_scope_json TEXT;');
+      await db.execAsync(`CREATE TABLE schema_migrations (version INTEGER PRIMARY KEY, applied_at TEXT NOT NULL);
+        INSERT INTO schema_migrations VALUES (1, '${timestamp}'), (2, '${timestamp}'), (3, '${timestamp}');`);
+      await migrateAsync(db); await migrateAsync(db);
+      expect(await new ProjectRepository(db).getById('keep')).toMatchObject({ title: 'Keep', createdAt: timestamp, updatedAt: timestamp });
+      expect((await db.getAllAsync<{ name: string }>('PRAGMA table_info(projects)')).some(column => column.name === 'draft_scope_json')).toBe(true);
+      expect((await db.getAllAsync<{ name: string }>('PRAGMA table_info(agreements)')).some(column => column.name === 'sealed')).toBe(true);
+      expect(await db.getFirstAsync("SELECT name FROM sqlite_master WHERE type = 'trigger' AND name = 'agreements_no_update'")).not.toBeNull();
+      expect(await db.getAllAsync('SELECT version FROM schema_migrations ORDER BY version')).toEqual([{ version: 1 }, { version: 2 }, { version: 3 }, { version: 4 }]);
+    } finally { await db.closeAsync(); }
+  });
+
+  test('staging drafts survive backup/restore and reject malformed or duplicate requirements', async () => {
+    const source = await realBackend(engine('{}'));
+    const target = openDatabase();
+    try {
+      const draft = { title: 'Manual', requirements: [{ id: 'R1', title: 'Website', description: '', category: 'deliverable' }],
+        budgetAmount: null, budgetCurrency: 'PHP', budgetNotes: null, durationDays: null, deadline: null,
+        timelineNotes: null, revisionTerms: null, exclusions: [], missingInformation: [], taxTreatment: 'none_specified' };
+      const project = await source.ports.projects.create({ id: 'staging-draft', title: 'Manual' });
+      const repo = new ProjectRepository(source.db);
+      await repo.update(project.id, { draftScopeJson: JSON.stringify(draft) });
+      await expect(repo.update(project.id, { draftScopeJson: '{broken' })).rejects.toThrow();
+      await expect(repo.update(project.id, { draftScopeJson: JSON.stringify({ ...draft, requirements: [draft.requirements[0], draft.requirements[0]] }) })).rejects.toThrow();
+      const backup = await new ExportService(source.db).exportProject(project.id);
+      await migrateAsync(target);
+      await new ExportService(target).importProject(backup);
+      expect((await new ProjectRepository(target).getById(project.id))?.draftScopeJson).toBe(JSON.stringify(draft));
+    } finally { await source.db.closeAsync(); await target.closeAsync(); }
   });
 
   test('migration failure rolls back schema changes without deleting user records', async () => {
     const db = openDatabase(); await initial.up(db); await tax.up(db);
-    await new ProjectRepository(db).create({ id: 'keep', title: 'Keep' });
+    await db.execAsync("INSERT INTO projects (id, title, created_at, updated_at) VALUES ('keep', 'Keep', '2026-10-09T00:00:00.000Z', '2026-10-09T00:00:00.000Z');");
     // A conflicting trigger makes migration 3 fail after its ALTER TABLE.
     await db.execAsync("CREATE TRIGGER agreements_no_update BEFORE UPDATE ON agreements BEGIN SELECT RAISE(ABORT, 'conflict'); END;");
     await expect(db.withTransactionAsync(() => integrity.up(db))).rejects.toThrow();
-    expect(await new ProjectRepository(db).getById('keep')).not.toBeNull();
+    expect(await db.getFirstAsync("SELECT id FROM projects WHERE id = 'keep'")).toEqual({ id: 'keep' });
     const columns = await db.getAllAsync<{ name: string }>('PRAGMA table_info(agreements)');
     expect(columns.some(c => c.name === 'sealed')).toBe(false);
     await db.execAsync('DROP TRIGGER agreements_no_update');
