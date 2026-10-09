@@ -9,17 +9,15 @@ export async function seedDemoDataAsync(db: SQLiteDatabase, force: boolean = fal
   const projectRepo = new ProjectRepository(db);
   const existingHarbor = await projectRepo.getById('proj_harbor_studio');
 
-  if (existingHarbor && !force) {
-    return false; // Database already has Harbor Studio seed data
-  }
-
-  if (existingHarbor && force) {
-    await db.runAsync('DELETE FROM proposals;');
-    await db.runAsync('DELETE FROM scope_analyses;');
+  if (force) {
+    await db.runAsync('DELETE FROM change_proposals;');
+    await db.runAsync('DELETE FROM scopeguard_analyses;');
     await db.runAsync('DELETE FROM client_requests;');
     await db.runAsync('DELETE FROM requirements;');
     await db.runAsync('DELETE FROM agreements;');
     await db.runAsync('DELETE FROM projects;');
+  } else if (existingHarbor) {
+    return false; // Database already has Harbor Studio seed data
   }
 
   const agreementRepo = new AgreementRepository(db);
@@ -133,6 +131,7 @@ export async function seedDemoDataAsync(db: SQLiteDatabase, force: boolean = fal
     agreementId: 'agmt_harbor_v2',
     rawText: 'Can we also add customer accounts and appointment booking? Please update the contact form colours too. And make the site feel more premium.',
     createdAt: now,
+    status: 'stored',
   });
 
   // Harbor Studio: ScopeGuard Analysis

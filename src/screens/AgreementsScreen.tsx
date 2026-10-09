@@ -45,7 +45,7 @@ export function AgreementsScreen({
   return (
     <View style={styles.container}>
       <HeaderBar
-        title="Saklaw"
+        title="OwlSet"
         subtitle="Your Private Workspace"
         showBack={false}
       />

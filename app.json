@@ -1,8 +1,8 @@
 {
   "expo": {
-    "name": "Diligent Dev",
-    "slug": "diligent-dev",
-    "scheme": "diligent-dev",
+    "name": "OwlSet",
+    "slug": "owlset",
+    "scheme": "owlset",
     "version": "1.0.0",
     "userInterfaceStyle": "light",
     "experiments": {
@@ -10,10 +10,10 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.diligentdev.app"
+      "bundleIdentifier": "com.owlset.app"
     },
     "android": {
-      "package": "com.diligentdev.app"
+      "package": "com.owlset.app"
     },
     "web": {
       "bundler": "metro",

@@ -24,3 +24,4 @@ local-ai/chroma_db/
 local-ai/logs/
 local-ai/.env
 local-ai/backend/__pycache__/
+.superpowers/

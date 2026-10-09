@@ -1,8 +1,8 @@
-# Saklaw
+# OwlSet
 
 Clear agreements. Controlled revisions. Confident freelancing.
 
-Saklaw is an offline-first mobile workspace for freelance developers and designers. It turns client conversations into structured, confirmed project scopes, compares new client requests against established agreements to prevent scope creep, generates legally compliant service contracts under Philippine law, and prepares professional change proposals with one-tap native sharing.
+OwlSet is an offline-first mobile workspace for freelance developers and designers. It turns client conversations into structured, confirmed project scopes, compares new client requests against established agreements to prevent scope creep, generates legally compliant service contracts under Philippine law, and prepares professional change proposals with one-tap native sharing.
 
 ---
 

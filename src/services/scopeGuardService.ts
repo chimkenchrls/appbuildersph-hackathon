@@ -4,7 +4,7 @@ import { buildScopeGuardPrompt } from '@/llm/prompts/scopeGuardPrompt';
 import { ScopeGuardRawOutputSchema } from '@/types/schemas';
 import type { AgreementRepository } from '@/database/repositories/agreementRepository';
 import type { ScopeGuardRepository } from '@/database/repositories/scopeGuardRepository';
-import type { ScopeGuardAnalysis, Finding } from '@/types/domain';
+import type { ScopeGuardAnalysis, Finding, ClientRequest } from '@/types/domain';
 
 export class ScopeGuardService {
   constructor(
@@ -135,6 +135,7 @@ export class ScopeGuardService {
       agreementId,
       rawText: trimmed,
       createdAt: now,
+      status: 'stored',
     });
 
     // Persist analysis record
@@ -158,5 +159,13 @@ export class ScopeGuardService {
 
   async listAnalyses(projectId: string): Promise<ScopeGuardAnalysis[]> {
     return this.scopeGuardRepo.listAnalysesByProjectId(projectId);
+  }
+
+  async listRequests(projectId: string): Promise<ClientRequest[]> {
+    return this.scopeGuardRepo.listRequestsByProjectId(projectId);
+  }
+
+  async deleteRequest(requestId: string): Promise<void> {
+    return this.scopeGuardRepo.deleteRequest(requestId);
   }
 }

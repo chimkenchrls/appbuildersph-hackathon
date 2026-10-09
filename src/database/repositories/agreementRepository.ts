@@ -17,6 +17,9 @@ interface AgreementRow {
   missing_info_json: string;
   tax_treatment?: string | null;
   confirmed_at: string;
+  client_approved_at?: string | null;
+  client_signatory_name?: string | null;
+  client_signature_data?: string | null;
 }
 
 interface RequirementRow {
@@ -38,8 +41,9 @@ export class AgreementRepository {
           budget_amount, budget_currency, budget_notes,
           duration_days, deadline, timeline_notes,
           revision_terms, exclusions_json, missing_info_json,
-          tax_treatment, confirmed_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
+          tax_treatment, confirmed_at, client_approved_at,
+          client_signatory_name, client_signature_data
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);`,
         [
           agreement.id,
           agreement.projectId,
@@ -56,6 +60,9 @@ export class AgreementRepository {
           JSON.stringify(agreement.missingInformation),
           agreement.taxTreatment || 'net_of_withholding',
           agreement.confirmedAt,
+          agreement.clientApprovedAt || null,
+          agreement.clientSignatoryName || null,
+          agreement.clientSignatureData || null,
         ],
       );
 
@@ -142,6 +149,23 @@ export class AgreementRepository {
       missingInformation: JSON.parse(row.missing_info_json || '[]'),
       taxTreatment: (row.tax_treatment as TaxTreatment) || 'net_of_withholding',
       confirmedAt: row.confirmed_at,
+      clientApprovedAt: row.client_approved_at || null,
+      clientSignatoryName: row.client_signatory_name || null,
+      clientSignatureData: row.client_signature_data || null,
     };
+  }
+
+  async recordClientApproval(
+    agreementId: string,
+    signatoryName: string,
+    signatureData?: string,
+  ): Promise<void> {
+    const now = new Date().toISOString();
+    await this.db.runAsync(
+      `UPDATE agreements
+       SET client_approved_at = ?, client_signatory_name = ?, client_signature_data = ?
+       WHERE id = ?;`,
+      [now, signatoryName, signatureData || null, agreementId],
+    );
   }
 }

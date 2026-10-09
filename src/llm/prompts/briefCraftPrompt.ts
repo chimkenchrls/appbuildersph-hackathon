@@ -5,33 +5,36 @@ export function buildBriefCraftPrompt(sourceText: string): LLMMessage[] {
 Analyze the provided client conversation or notes and extract the project scope.
 
 Rules:
-1. Extract explicit deliverables as discrete items with title and concise description.
-2. Extract terms including agreed budget, currency (default PHP if in Philippines or unstated), deadline, and revision allowances.
-3. If an item is not mentioned in the source text, set its value to null. Do not invent or assume details.
-4. List items that are clearly omitted or need clarification in missing_information.
-5. If tax or withholding is mentioned, set tax_treatment to one of: "net_of_withholding", "inclusive", "subject_to_2307", or "none_specified". If not mentioned, set null.
-6. Return valid JSON only. Do not include markdown code fences or conversational text.
+1. Extract ONLY what is explicitly stated in the conversation or notes.
+2. Deliverables: Extract discrete deliverables with title and concise description directly from what was discussed.
+3. Budget: Set "amount" to the exact numeric amount found in the text, or null if not mentioned. Do NOT invent prices.
+4. Timeline: Set "duration_days" to the number of days mentioned (e.g. 14 for 2 weeks), or null if not mentioned. Do NOT invent timelines.
+5. Revision terms: Set revision terms if explicitly mentioned, or null if not mentioned.
+6. Exclusions: List ONLY items explicitly stated as excluded or out-of-scope. If none are stated, return [].
+7. Missing information: List vital details that are unstated (e.g., "Agreed budget is not specified", "Deadline is not specified").
+8. Tax treatment: Set to "net_of_withholding", "inclusive", "subject_to_2307", or "none_specified" if tax is mentioned; otherwise null.
+9. Return strictly valid JSON only. No explanations, no markdown fences.
 
 Output JSON format:
 {
   "title": "Short descriptive project title",
   "deliverables": [
-    { "title": "Deliverable title", "description": "Brief description" }
+    { "title": "Deliverable title", "description": "Concise description" }
   ],
   "budget": {
-    "amount": 15000,
+    "amount": null,
     "currency": "PHP",
-    "notes": "Agreed price from notes"
+    "notes": null
   },
   "timeline": {
-    "duration_days": 14,
+    "duration_days": null,
     "deadline": null,
-    "notes": "Two-week turnaround"
+    "notes": null
   },
-  "revision_terms": "Two rounds of revisions",
-  "exclusions": ["Items explicitly excluded or out of initial discussions"],
-  "missing_information": ["Critical items that were unstated, like hosting or assets"],
-  "tax_treatment": "net_of_withholding"
+  "revision_terms": null,
+  "exclusions": [],
+  "missing_information": [],
+  "tax_treatment": null
 }`;
 
   return [

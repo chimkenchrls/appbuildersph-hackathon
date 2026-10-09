@@ -32,12 +32,13 @@ export class BriefCraftService {
         const requirements: Requirement[] = [];
 
         for (const item of parsed.deliverables) {
+          if (!item.title.trim()) continue;
           const id = `REQ-${String(counter).padStart(2, '0')}`;
           counter++;
           requirements.push({
             id,
-            title: item.title,
-            description: item.description,
+            title: item.title.trim(),
+            description: item.description.trim() || item.title.trim(),
             category: 'deliverable',
           });
         }
@@ -53,6 +54,16 @@ export class BriefCraftService {
           });
         }
 
+        // If no deliverables were extracted by LLM, generate at least one from sourceText
+        if (requirements.length === 0) {
+          requirements.push({
+            id: 'REQ-01',
+            title: fallbackTitle || parsed.title || 'Project scope',
+            description: trimmed.slice(0, 200) + (trimmed.length > 200 ? '...' : ''),
+            category: 'deliverable',
+          });
+        }
+
         return {
           title: parsed.title || fallbackTitle || 'Project Scope',
           requirements,
@@ -63,9 +74,11 @@ export class BriefCraftService {
           deadline: parsed.timeline.deadline,
           timelineNotes: parsed.timeline.notes,
           revisionTerms: parsed.revision_terms,
-          exclusions: parsed.exclusions,
-          missingInformation: parsed.missing_information,
-          taxTreatment: (parsed.tax_treatment as TaxTreatment) || 'net_of_withholding',
+          exclusions: parsed.exclusions || [],
+          missingInformation: parsed.missing_information || [],
+          taxTreatment: (parsed.tax_treatment as TaxTreatment) || 'none_specified',
+          sourceConversation: trimmed,
+          extractedWithAi: true,
         };
       }
     } catch {
@@ -81,19 +94,22 @@ export class BriefCraftService {
 
     // 1. Budget extraction (e.g. ₱15,000, ₱28,000, 15000 PHP, etc.)
     let budgetAmount: number | null = null;
-    const budgetMatch = sourceText.match(/(?:[₱]|PHP|Php)\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/i) ||
-      sourceText.match(/budget\s*(?:is|of|:)?\s*(?:[₱]|PHP|Php)?\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/i);
+    let budgetNotes: string | null = null;
+    const budgetMatch =
+      sourceText.match(/(?:[₱]|PHP|Php|\$)\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/i) ||
+      sourceText.match(/budget\s*(?:is|of|:)?\s*(?:[₱]|PHP|Php|\$)?\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/i);
 
     if (budgetMatch && budgetMatch[1]) {
       const num = parseInt(budgetMatch[1].replace(/,/g, ''), 10);
       if (!isNaN(num)) {
         budgetAmount = num;
+        budgetNotes = `Extracted from conversation: ₱${num.toLocaleString('en-US')}.`;
       }
     }
 
     // 2. Timeline extraction (e.g. 2 weeks, 3 weeks, 14 days, 30 days)
     let durationDays: number | null = null;
-    let timelineNotes = '2 weeks turnaround from deposit.';
+    let timelineNotes: string | null = null;
     const timelineWeekMatch = sourceText.match(/(\d+)\s*weeks?/i);
     const timelineDayMatch = sourceText.match(/(\d+)\s*days?/i);
     const timelineMonthMatch = sourceText.match(/(\d+)\s*months?/i);
@@ -101,30 +117,27 @@ export class BriefCraftService {
     if (timelineWeekMatch && timelineWeekMatch[1]) {
       const weeks = parseInt(timelineWeekMatch[1], 10);
       durationDays = weeks * 7;
-      timelineNotes = `${weeks} weeks turnaround from deposit.`;
+      timelineNotes = `${weeks} week${weeks === 1 ? '' : 's'} turnaround.`;
     } else if (timelineDayMatch && timelineDayMatch[1]) {
       const days = parseInt(timelineDayMatch[1], 10);
       durationDays = days;
-      timelineNotes = `${days} days turnaround from deposit.`;
+      timelineNotes = `${days} day${days === 1 ? '' : 's'} turnaround.`;
     } else if (timelineMonthMatch && timelineMonthMatch[1]) {
       const months = parseInt(timelineMonthMatch[1], 10);
       durationDays = months * 30;
-      timelineNotes = `${months} month turnaround from deposit.`;
+      timelineNotes = `${months} month${months === 1 ? '' : 's'} turnaround.`;
     }
 
     // 3. Revision terms extraction (e.g. 2 rounds, two rounds)
-    let revisionTerms = 'Two rounds of revisions included. Additional revisions quoted separately.';
+    let revisionTerms: string | null = null;
     const revMatch = sourceText.match(/(\d+|one|two|three|four)\s*rounds?\s*(?:of\s*)?(?:design\s*)?revisions?/i);
     if (revMatch && revMatch[1]) {
       const val = revMatch[1].toLowerCase();
       const count = val === 'one' ? 1 : val === 'two' ? 2 : val === 'three' ? 3 : val === 'four' ? 4 : parseInt(val, 10);
-      revisionTerms = `${count} round${count === 1 ? '' : 's'} of revisions included. Additional revisions quoted separately.`;
+      revisionTerms = `${count} round${count === 1 ? '' : 's'} of revisions included.`;
     }
 
-    // 4. Deliverables extraction
-    const lower = sourceText.toLowerCase();
-
-    // Check for explicit bullet lines first
+    // 4. Deliverables extraction from actual sourceText
     const lines = sourceText.split('\n').map((l) => l.trim()).filter(Boolean);
     const bulletLines = lines.filter((l) => /^[•\-\*\d+\.]\s+/.test(l));
 
@@ -133,8 +146,18 @@ export class BriefCraftService {
         const clean = b.replace(/^[•\-\*\d+\.]\s+/, '').trim();
         if (clean.length > 0) {
           const colonIdx = clean.indexOf(':');
-          const title = colonIdx > 0 ? clean.substring(0, colonIdx).trim() : clean;
-          const desc = colonIdx > 0 ? clean.substring(colonIdx + 1).trim() : clean;
+          const dashIdx = clean.indexOf(' - ');
+          let title = clean;
+          let desc = clean;
+
+          if (colonIdx > 0 && colonIdx < 50) {
+            title = clean.substring(0, colonIdx).trim();
+            desc = clean.substring(colonIdx + 1).trim() || title;
+          } else if (dashIdx > 0 && dashIdx < 50) {
+            title = clean.substring(0, dashIdx).trim();
+            desc = clean.substring(dashIdx + 3).trim() || title;
+          }
+
           requirements.push({
             id: `REQ-${String(counter++).padStart(2, '0')}`,
             title,
@@ -143,101 +166,116 @@ export class BriefCraftService {
           });
         }
       }
+    } else if (lines.length > 1 && lines.length <= 8) {
+      // Multiple distinct lines
+      for (const line of lines) {
+        if (line.length < 3) continue;
+        const colonIdx = line.indexOf(':');
+        let title = line;
+        let desc = line;
+        if (colonIdx > 0 && colonIdx < 40) {
+          title = line.substring(0, colonIdx).trim();
+          desc = line.substring(colonIdx + 1).trim() || title;
+        } else if (line.length > 50) {
+          title = line.substring(0, 40).trim() + '...';
+        }
+        requirements.push({
+          id: `REQ-${String(counter++).padStart(2, '0')}`,
+          title,
+          description: desc,
+          category: 'deliverable',
+        });
+      }
     } else {
-      // Heuristic deliverable matching based on common creative & tech brief terms
-      if (lower.includes('website') || lower.includes('web design') || lower.includes('5-page') || lower.includes('page')) {
-        requirements.push({
-          id: `REQ-${String(counter++).padStart(2, '0')}`,
-          title: 'Five responsive pages',
-          description: 'Home, About, Services, Work, and Contact.',
-          category: 'deliverable',
-        });
-      }
+      // Freeform single block: extract from sentences or key clauses
+      const sentences = sourceText
+        .split(/(?<=[.!?])\s+/)
+        .map((s) => s.trim())
+        .filter((s) => s.length > 5);
 
-      if (lower.includes('contact form') || lower.includes('form')) {
+      if (sentences.length > 1 && sentences.length <= 6) {
+        for (const s of sentences) {
+          requirements.push({
+            id: `REQ-${String(counter++).padStart(2, '0')}`,
+            title: s.length > 45 ? s.substring(0, 42).trim() + '...' : s,
+            description: s,
+            category: 'deliverable',
+          });
+        }
+      } else {
         requirements.push({
-          id: `REQ-${String(counter++).padStart(2, '0')}`,
-          title: 'Contact form',
-          description: 'Responsive inquiry form with validation.',
+          id: `REQ-01`,
+          title: fallbackTitle || 'Project Deliverables',
+          description: sourceText.slice(0, 300) + (sourceText.length > 300 ? '...' : ''),
           category: 'deliverable',
         });
-      }
-
-      if (lower.includes('brand guidelines') || lower.includes('branding') || lower.includes('brand identity')) {
-        requirements.push({
-          id: `REQ-${String(counter++).padStart(2, '0')}`,
-          title: 'Complete brand guidelines',
-          description: 'Visual identity system, logo usage rules, and design specifications.',
-          category: 'deliverable',
-        });
-      }
-
-      if (lower.includes('app icon') || lower.includes('icon')) {
-        requirements.push({
-          id: `REQ-${String(counter++).padStart(2, '0')}`,
-          title: 'App icon asset package',
-          description: 'Vector and raster app icon exports for mobile app stores.',
-          category: 'deliverable',
-        });
-      }
-
-      if (lower.includes('typography') || lower.includes('palette') || lower.includes('color')) {
-        requirements.push({
-          id: `REQ-${String(counter++).padStart(2, '0')}`,
-          title: 'Typography & color palette',
-          description: 'Curated font pairings and accessible hex color palette.',
-          category: 'deliverable',
-        });
-      }
-
-      if (lower.includes('design system') || lower.includes('screen design') || lower.includes('screen')) {
-        requirements.push({
-          id: `REQ-${String(counter++).padStart(2, '0')}`,
-          title: 'Mobile screen design system',
-          description: 'Modular UI components and key application screens.',
-          category: 'deliverable',
-        });
+        counter = 2;
       }
     }
 
-    // Fallback if no specific deliverables detected
-    if (requirements.length === 0) {
+    // Add revision terms requirement if explicitly detected
+    if (revisionTerms) {
       requirements.push({
-        id: `REQ-01`,
-        title: 'Project deliverables',
-        description: sourceText.slice(0, 150) + (sourceText.length > 150 ? '...' : ''),
-        category: 'deliverable',
+        id: `REQ-${String(counter++).padStart(2, '0')}`,
+        title: 'Design revisions',
+        description: revisionTerms,
+        category: 'term',
       });
-      counter = 2;
     }
 
-    // Add revision terms requirement
-    requirements.push({
-      id: `REQ-${String(counter).padStart(2, '0')}`,
-      title: 'Design revisions',
-      description: revisionTerms,
-      category: 'term',
-    });
+    // 5. Exclusions extraction (explicitly stated out-of-scope items)
+    const exclusions: string[] = [];
+    for (const line of lines) {
+      const lower = line.toLowerCase();
+      if (
+        lower.includes('not included') ||
+        lower.includes('out of scope') ||
+        lower.includes('exclude') ||
+        lower.includes('excluding') ||
+        lower.includes('does not include')
+      ) {
+        exclusions.push(line.replace(/^[•\-\*\d+\.]\s+/, '').trim());
+      }
+    }
+
+    // 6. Missing information: dynamically detect unstated items
+    const missingInformation: string[] = [];
+    if (budgetAmount == null) {
+      missingInformation.push('Budget amount is not specified in the conversation.');
+    }
+    if (durationDays == null) {
+      missingInformation.push('Delivery timeline or deadline is not specified.');
+    }
+    if (!revisionTerms) {
+      missingInformation.push('Revision round allowance is not specified.');
+    }
+
+    // 7. Tax treatment extraction
+    let taxTreatment: TaxTreatment = 'none_specified';
+    const lowerFull = sourceText.toLowerCase();
+    if (lowerFull.includes('net of withholding') || lowerFull.includes('net withholding')) {
+      taxTreatment = 'net_of_withholding';
+    } else if (lowerFull.includes('tax inclusive') || lowerFull.includes('vat inclusive')) {
+      taxTreatment = 'inclusive';
+    } else if (lowerFull.includes('2307') || lowerFull.includes('bir form 2307')) {
+      taxTreatment = 'subject_to_2307';
+    }
 
     return {
       title: fallbackTitle || 'Project Scope',
       requirements,
-      budgetAmount: budgetAmount ?? 15000,
+      budgetAmount,
       budgetCurrency: 'PHP',
-      budgetNotes: budgetAmount ? `Agreed fixed price: ₱${budgetAmount.toLocaleString()}.` : 'Agreed fixed price for initial scope.',
-      durationDays: durationDays ?? 14,
+      budgetNotes,
+      durationDays,
       deadline: null,
       timelineNotes,
       revisionTerms,
-      exclusions: [
-        'User account authentication and member portal',
-        'Appointment booking calendar engine',
-        'Hosting and third-party domain registration fees',
-      ],
-      missingInformation: [
-        'Delivery date is missing. Add the agreed date before confirming.',
-      ],
-      taxTreatment: 'none_specified',
+      exclusions,
+      missingInformation,
+      taxTreatment,
+      sourceConversation: sourceText.trim(),
+      extractedWithAi: false,
     };
   }
 }

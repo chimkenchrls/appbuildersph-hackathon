@@ -18,6 +18,8 @@ interface RequestRow {
   agreement_id: string;
   raw_text: string;
   created_at: string;
+  status?: string | null;
+  accepted_at?: string | null;
 }
 
 export class ScopeGuardRepository {
@@ -25,16 +27,24 @@ export class ScopeGuardRepository {
 
   async createRequest(req: ClientRequest): Promise<ClientRequest> {
     await this.db.runAsync(
-      `INSERT INTO client_requests (id, project_id, agreement_id, raw_text, created_at)
-       VALUES (?, ?, ?, ?, ?);`,
-      [req.id, req.projectId, req.agreementId, req.rawText.trim(), req.createdAt],
+      `INSERT INTO client_requests (id, project_id, agreement_id, raw_text, created_at, status, accepted_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?);`,
+      [
+        req.id,
+        req.projectId,
+        req.agreementId,
+        req.rawText.trim(),
+        req.createdAt,
+        req.status || 'stored',
+        req.acceptedAt || null,
+      ],
     );
     return req;
   }
 
   async getRequestById(id: string): Promise<ClientRequest | null> {
     const row = await this.db.getFirstAsync<RequestRow>(
-      'SELECT id, project_id, agreement_id, raw_text, created_at FROM client_requests WHERE id = ?;',
+      'SELECT id, project_id, agreement_id, raw_text, created_at, status, accepted_at FROM client_requests WHERE id = ?;',
       [id],
     );
     if (!row) return null;
@@ -44,12 +54,14 @@ export class ScopeGuardRepository {
       agreementId: row.agreement_id,
       rawText: row.raw_text,
       createdAt: row.created_at,
+      status: (row.status as any) || 'stored',
+      acceptedAt: row.accepted_at || null,
     };
   }
 
   async listRequestsByProjectId(projectId: string): Promise<ClientRequest[]> {
     const rows = await this.db.getAllAsync<RequestRow>(
-      'SELECT id, project_id, agreement_id, raw_text, created_at FROM client_requests WHERE project_id = ? ORDER BY created_at DESC;',
+      'SELECT id, project_id, agreement_id, raw_text, created_at, status, accepted_at FROM client_requests WHERE project_id = ? ORDER BY created_at DESC;',
       [projectId],
     );
     return rows.map((r) => ({
@@ -58,7 +70,24 @@ export class ScopeGuardRepository {
       agreementId: r.agreement_id,
       rawText: r.raw_text,
       createdAt: r.created_at,
+      status: (r.status as any) || 'stored',
+      acceptedAt: r.accepted_at || null,
     }));
+  }
+
+  async updateRequestStatus(
+    id: string,
+    status: 'stored' | 'analyzed' | 'accepted',
+    acceptedAt?: string,
+  ): Promise<void> {
+    await this.db.runAsync(
+      'UPDATE client_requests SET status = ?, accepted_at = ? WHERE id = ?;',
+      [status, acceptedAt || null, id],
+    );
+  }
+
+  async deleteRequest(id: string): Promise<void> {
+    await this.db.runAsync('DELETE FROM client_requests WHERE id = ?;', [id]);
   }
 
   async createAnalysis(analysis: ScopeGuardAnalysis): Promise<ScopeGuardAnalysis> {

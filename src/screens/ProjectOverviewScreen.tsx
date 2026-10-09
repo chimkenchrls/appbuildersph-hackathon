@@ -6,25 +6,53 @@ import {
   ScrollView,
   Pressable,
   Modal,
+  TextInput,
+  Alert,
+  Platform,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { HeaderBar } from '@/components/HeaderBar';
 import { colors, radii, spacing, shadows } from '@/constants/theme';
 import { AppIcon } from '@/components/Icon';
-import { ContractGeneratorService } from '@/services/contractGeneratorService';
 import { ShareService } from '@/services/shareService';
 import { hapticSuccess, hapticImpactLight } from '@/utils/haptics';
-import type { Project, Agreement, ScopeDraft } from '@/types/domain';
+import type {
+  Project,
+  Agreement,
+  ScopeDraft,
+  ClientRequest,
+  ScopeGuardAnalysis,
+  ChangeProposal,
+} from '@/types/domain';
 
 interface ProjectOverviewScreenProps {
   currentProject: Project;
   allProjects: Project[];
   agreements: Agreement[];
   selectedAgreement: Agreement | null;
+  requests?: ClientRequest[];
+  analyses?: Record<string, ScopeGuardAnalysis>;
+  proposals?: Record<string, ChangeProposal>;
   onSelectProject: (projectId: string) => void;
   onSelectAgreementVersion: (agreement: Agreement) => void;
   onNavigateToNewRequest: () => void;
+  onReviewRequest?: (request: ClientRequest) => void;
+  onAcceptRequest?: (
+    request: ClientRequest,
+    additions: string[],
+    additionalFee: number | null,
+    additionalDays: number | null,
+    signatoryName?: string | null,
+    approvalNotes?: string | null,
+  ) => Promise<void> | void;
+  onRecordClientApproval?: (
+    agreementId: string,
+    signatoryName: string,
+    signatureNotes?: string,
+  ) => Promise<void> | void;
+  onDeleteRequest?: (requestId: string) => Promise<void> | void;
+  onDeleteProject?: (projectId: string) => Promise<void> | void;
   onBack: () => void;
   onReleaseScope?: () => void;
   onEditScopeDraft?: () => void;
@@ -153,8 +181,16 @@ export function ProjectOverviewScreen({
   currentProject,
   agreements,
   selectedAgreement,
+  requests = [],
+  analyses = {},
+  proposals = {},
   onSelectAgreementVersion,
   onNavigateToNewRequest,
+  onReviewRequest,
+  onAcceptRequest,
+  onRecordClientApproval,
+  onDeleteRequest,
+  onDeleteProject,
   onBack,
   onReleaseScope,
   onEditScopeDraft,
@@ -164,7 +200,54 @@ export function ProjectOverviewScreen({
   const [contractModalOpen, setContractModalOpen] = useState(false);
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
 
+  const handleConfirmDeleteProject = () => {
+    if (Platform.OS === 'web') {
+      if (
+        typeof window !== 'undefined' &&
+        window.confirm(
+          `Are you sure you want to delete "${currentProject.title}"? This cannot be undone.`,
+        )
+      ) {
+        onDeleteProject?.(currentProject.id);
+      }
+    } else {
+      Alert.alert(
+        'Delete Project',
+        `Are you sure you want to delete "${currentProject.title}"? This will permanently delete all associated agreements, requests, and proposals.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          {
+            text: 'Delete',
+            style: 'destructive',
+            onPress: () => onDeleteProject?.(currentProject.id),
+          },
+        ],
+      );
+    }
+  };
+
+  // Standalone client approval modal states
+  const [clientApprovalModalOpen, setClientApprovalModalOpen] = useState(false);
+  const [standaloneSignatory, setStandaloneSignatory] = useState('');
+  const [standaloneNotes, setStandaloneNotes] = useState('');
+
+  // Accept Scope Change modal states
+  const [acceptModalOpen, setAcceptModalOpen] = useState(false);
+  const [targetRequest, setTargetRequest] = useState<ClientRequest | null>(null);
+  const [selectedAdditions, setSelectedAdditions] = useState<string[]>([]);
+  const [customAdditionText, setCustomAdditionText] = useState('');
+  const [extraFee, setExtraFee] = useState('7000');
+  const [extraDays, setExtraDays] = useState('5');
+  const [recordClientApprovalCheckbox, setRecordClientApprovalCheckbox] = useState(true);
+  const [signatoryName, setSignatoryName] = useState('');
+  const [approvalNotes, setApprovalNotes] = useState('');
+  const [isSubmittingAccept, setIsSubmittingAccept] = useState(false);
+
   const isDrafting = agreements.length === 0;
+
+  const projectRequests = useMemo(() => {
+    return requests || [];
+  }, [requests]);
 
   const draftScope = useMemo<ScopeDraft | null>(() => {
     if (!currentProject.draftScopeJson) return null;
@@ -179,13 +262,108 @@ export function ProjectOverviewScreen({
   const isLatest =
     agreements.length > 0 && activeAgreement?.id === agreements[0].id;
 
-  const contractText = activeAgreement
-    ? ContractGeneratorService.generateContractText(activeAgreement, {
-        freelancerName: 'Independent Developer',
-        clientName: currentProject.clientName || 'Client',
-        paymentMethod: 'Bank Transfer / GCash / Maya',
-      })
-    : '';
+  const handleOpenAcceptModal = (req: ClientRequest) => {
+    setTargetRequest(req);
+    const reqAnalysis = analyses?.[req.id];
+    const detectedAdditions = reqAnalysis
+      ? reqAnalysis.findings
+          .filter((f) => f.classification === 'potential_additional')
+          .map((f) => f.item)
+      : [];
+
+    setSelectedAdditions(
+      detectedAdditions.length > 0
+        ? detectedAdditions
+        : [req.rawText.slice(0, 35) + '...'],
+    );
+    setCustomAdditionText('');
+    setExtraFee('7000');
+    setExtraDays('5');
+    setRecordClientApprovalCheckbox(true);
+    setSignatoryName(currentProject.clientName || 'Client');
+    setApprovalNotes('Agreed offline via direct conversation');
+    setAcceptModalOpen(true);
+  };
+
+  const handleToggleAddition = (item: string) => {
+    setSelectedAdditions((prev) =>
+      prev.includes(item) ? prev.filter((i) => i !== item) : [...prev, item],
+    );
+  };
+
+  const handleAddCustomAddition = () => {
+    if (customAdditionText.trim()) {
+      const trimmed = customAdditionText.trim();
+      if (!selectedAdditions.includes(trimmed)) {
+        setSelectedAdditions((prev) => [...prev, trimmed]);
+      }
+      setCustomAdditionText('');
+    }
+  };
+
+  const handleConfirmAcceptRequest = async () => {
+    if (!targetRequest || !onAcceptRequest) return;
+    const items = [...selectedAdditions];
+    if (customAdditionText.trim() && !items.includes(customAdditionText.trim())) {
+      items.push(customAdditionText.trim());
+    }
+
+    if (items.length === 0) {
+      Alert.alert(
+        'Deliverable required',
+        'Please select or enter at least one deliverable to add.',
+      );
+      return;
+    }
+
+    setIsSubmittingAccept(true);
+    try {
+      const feeNum = extraFee.trim()
+        ? parseInt(extraFee.replace(/[^0-9]/g, ''), 10)
+        : null;
+      const daysNum = extraDays.trim()
+        ? parseInt(extraDays.replace(/[^0-9]/g, ''), 10)
+        : null;
+
+      await onAcceptRequest(
+        targetRequest,
+        items,
+        feeNum,
+        daysNum,
+        recordClientApprovalCheckbox
+          ? signatoryName.trim() || currentProject.clientName || 'Client'
+          : null,
+        recordClientApprovalCheckbox
+          ? approvalNotes.trim() || 'Offline agreement'
+          : null,
+      );
+
+      await hapticSuccess();
+      setAcceptModalOpen(false);
+      setTargetRequest(null);
+    } catch {
+      Alert.alert('Error', 'Unable to accept request.');
+    } finally {
+      setIsSubmittingAccept(false);
+    }
+  };
+
+  const handleRecordStandaloneClientApproval = async () => {
+    if (!activeAgreement || !onRecordClientApproval) return;
+    const signatory =
+      standaloneSignatory.trim() || currentProject.clientName || 'Client';
+    await hapticSuccess();
+    try {
+      await onRecordClientApproval(
+        activeAgreement.id,
+        signatory,
+        standaloneNotes.trim() || 'Offline agreement',
+      );
+      setClientApprovalModalOpen(false);
+    } catch {
+      Alert.alert('Error', 'Unable to record client approval.');
+    }
+  };
 
   const [isExportingPdf, setIsExportingPdf] = useState(false);
 
@@ -382,7 +560,7 @@ export function ProjectOverviewScreen({
             ) : null}
           </View>
         ) : (
-          /* Primary CTA: Review a new request */
+          /* Primary CTA: Add new client request */
           <Pressable
             style={({ pressed }) => [
               styles.primaryButton,
@@ -390,9 +568,9 @@ export function ProjectOverviewScreen({
             ]}
             onPress={onNavigateToNewRequest}
             accessibilityRole="button"
-            accessibilityLabel="Review a new request"
+            accessibilityLabel="Add new client request"
           >
-            <Text style={styles.primaryButtonText}>Review a new request</Text>
+            <Text style={styles.primaryButtonText}>+ Add new client request</Text>
           </Pressable>
         )}
 
@@ -433,12 +611,40 @@ export function ProjectOverviewScreen({
               </Text>
             </View>
             <View style={styles.checkItem}>
-              <ClientPendingIcon size={18} />
-              <Text style={styles.checkTextSecondary}>
-                {isDrafting
-                  ? 'Baseline release: Pending release'
-                  : 'Client Approval: not recorded'}
-              </Text>
+              {activeAgreement?.clientApprovedAt ? (
+                <FreelancerCheckIcon size={18} />
+              ) : (
+                <ClientPendingIcon size={18} />
+              )}
+              <View style={styles.checkApprovalRow}>
+                <Text
+                  style={
+                    activeAgreement?.clientApprovedAt
+                      ? styles.checkText
+                      : styles.checkTextSecondary
+                  }
+                >
+                  {isDrafting
+                    ? 'Baseline release: Pending release'
+                    : activeAgreement?.clientApprovedAt
+                      ? `Client Approval: Approved by ${activeAgreement.clientSignatoryName || currentProject.clientName || 'Client'}`
+                      : 'Client Approval: Not recorded yet'}
+                </Text>
+                {!isDrafting && !activeAgreement?.clientApprovedAt && onRecordClientApproval && (
+                  <Pressable
+                    style={styles.recordBadgeBtn}
+                    onPress={() => {
+                      setStandaloneSignatory(currentProject.clientName || 'Client');
+                      setStandaloneNotes('Agreed offline via direct conversation');
+                      setClientApprovalModalOpen(true);
+                    }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Record client approval"
+                  >
+                    <Text style={styles.recordBadgeBtnText}>Record</Text>
+                  </Pressable>
+                )}
+              </View>
             </View>
           </View>
         </View>
@@ -465,6 +671,182 @@ export function ProjectOverviewScreen({
             <Text style={styles.draftNoticeText}>
               Click <Text style={styles.boldText}>Release Scope</Text> above to lock Agreement v1.
             </Text>
+          </View>
+        )}
+
+        {/* Stored Client Requests Section */}
+        {!isDrafting && (
+          <View style={styles.requestsSection}>
+            <View style={styles.requestsSectionHeader}>
+              <View style={styles.requestsHeaderTitleCol}>
+                <Text style={styles.sectionTitle}>Client Requests</Text>
+                <Text style={styles.requestsSectionSub}>
+                  Stored offline ({projectRequests.length}) · Talk with client to agree
+                </Text>
+              </View>
+              <Pressable
+                style={styles.addRequestSmallBtn}
+                onPress={onNavigateToNewRequest}
+                accessibilityRole="button"
+                accessibilityLabel="Add client request"
+              >
+                <AppIcon name="plus" size={13} color={colors.primary} />
+                <Text style={styles.addRequestSmallBtnText}>Add Request</Text>
+              </Pressable>
+            </View>
+
+            {projectRequests.length === 0 ? (
+              <View style={styles.emptyRequestsCard}>
+                <AppIcon name="document" size={20} color={colors.textSecondary} />
+                <View style={styles.emptyRequestsTextCol}>
+                  <Text style={styles.emptyRequestsTitle}>No client requests stored</Text>
+                  <Text style={styles.emptyRequestsDesc}>
+                    When your client asks for changes, paste their message here to store offline.
+                  </Text>
+                </View>
+                <Pressable
+                  style={styles.emptyAddBtn}
+                  onPress={onNavigateToNewRequest}
+                >
+                  <Text style={styles.emptyAddBtnText}>+ Add</Text>
+                </Pressable>
+              </View>
+            ) : (
+              <View style={styles.requestsList}>
+                {projectRequests.map((req) => {
+                  const reqAnalysis = analyses?.[req.id] || null;
+                  const isAccepted = req.status === 'accepted';
+                  const additions = reqAnalysis?.findings.filter(
+                    (f) => f.classification === 'potential_additional',
+                  ) || [];
+                  const included = reqAnalysis?.findings.filter(
+                    (f) => f.classification === 'included',
+                  ) || [];
+
+                  return (
+                    <View key={req.id} style={styles.requestCard}>
+                      <View style={styles.requestCardHeader}>
+                        <Text style={styles.requestDate}>
+                          {new Date(req.createdAt).toLocaleDateString(undefined, {
+                            day: 'numeric',
+                            month: 'short',
+                            year: 'numeric',
+                          })}
+                        </Text>
+                        <View
+                          style={[
+                            styles.requestStatusBadge,
+                            isAccepted
+                              ? styles.requestStatusBadgeAccepted
+                              : styles.requestStatusBadgePending,
+                          ]}
+                        >
+                          <Text
+                            style={[
+                              styles.requestStatusText,
+                              isAccepted
+                                ? styles.requestStatusTextAccepted
+                                : styles.requestStatusTextPending,
+                            ]}
+                          >
+                            {isAccepted
+                              ? '✓ Accepted in Scope'
+                              : 'Stored · Pending client talk'}
+                          </Text>
+                        </View>
+                      </View>
+
+                      {/* Raw text quote */}
+                      <View style={styles.requestQuoteBox}>
+                        <Text style={styles.requestQuoteText} numberOfLines={3}>
+                          &ldquo;{req.rawText}&rdquo;
+                        </Text>
+                      </View>
+
+                      {/* Detected Findings Badges */}
+                      {(additions.length > 0 || included.length > 0) && (
+                        <View style={styles.findingsPillsRow}>
+                          {additions.map((item, idx) => (
+                            <View key={`add-${idx}`} style={styles.additionPill}>
+                              <Text style={styles.additionPillText}>
+                                + {item.item}
+                              </Text>
+                            </View>
+                          ))}
+                          {included.map((item, idx) => (
+                            <View key={`inc-${idx}`} style={styles.includedPill}>
+                              <Text style={styles.includedPillText}>
+                                ✓ {item.item}
+                              </Text>
+                            </View>
+                          ))}
+                        </View>
+                      )}
+
+                      {/* Action buttons */}
+                      <View style={styles.requestActionsRow}>
+                        {!isAccepted ? (
+                          <>
+                            {onAcceptRequest && (
+                              <Pressable
+                                style={({ pressed }) => [
+                                  styles.acceptRequestBtn,
+                                  pressed && styles.acceptRequestBtnPressed,
+                                ]}
+                                onPress={() => handleOpenAcceptModal(req)}
+                                accessibilityRole="button"
+                                accessibilityLabel="Accept request and update scope"
+                              >
+                                <AppIcon name="check" size={13} color="#FFFFFF" />
+                                <Text style={styles.acceptRequestBtnText}>
+                                  Accept Request
+                                </Text>
+                              </Pressable>
+                            )}
+
+                            {onReviewRequest && (
+                              <Pressable
+                                style={({ pressed }) => [
+                                  styles.reviewRequestBtn,
+                                  pressed && styles.reviewRequestBtnPressed,
+                                ]}
+                                onPress={() => onReviewRequest(req)}
+                                accessibilityRole="button"
+                                accessibilityLabel="Review request & proposal"
+                              >
+                                <AppIcon name="sparkles" size={13} color={colors.primary} />
+                                <Text style={styles.reviewRequestBtnText}>
+                                  Review &amp; Proposal
+                                </Text>
+                              </Pressable>
+                            )}
+
+                            {onDeleteRequest && (
+                              <Pressable
+                                style={styles.deleteRequestBtn}
+                                onPress={() => onDeleteRequest(req.id)}
+                                hitSlop={8}
+                                accessibilityRole="button"
+                                accessibilityLabel="Delete request"
+                              >
+                                <AppIcon name="trash" size={14} color={colors.textMuted} />
+                              </Pressable>
+                            )}
+                          </>
+                        ) : (
+                          <View style={styles.acceptedNoticeRow}>
+                            <FreelancerCheckIcon size={14} />
+                            <Text style={styles.acceptedNoticeText}>
+                              Agreed offline with client · Sealed into baseline
+                            </Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  );
+                })}
+              </View>
+            )}
           </View>
         )}
 
@@ -548,6 +930,22 @@ export function ProjectOverviewScreen({
         >
           <Text style={styles.primaryButtonText}>Legal Contract</Text>
         </Pressable>
+
+        {/* Delete Project Action */}
+        {onDeleteProject && (
+          <Pressable
+            style={({ pressed }) => [
+              styles.deleteProjectOutlineBtn,
+              pressed && styles.deleteProjectOutlineBtnPressed,
+            ]}
+            onPress={handleConfirmDeleteProject}
+            accessibilityRole="button"
+            accessibilityLabel={`Delete project ${currentProject.title}`}
+          >
+            <AppIcon name="trash" size={15} color={colors.errorText} />
+            <Text style={styles.deleteProjectOutlineText}>Delete Project</Text>
+          </Pressable>
+        )}
       </ScrollView>
 
       {/* Version History Picker Modal */}
@@ -678,10 +1076,452 @@ export function ProjectOverviewScreen({
               <Text style={styles.shareFeedback}>{shareFeedback}</Text>
             ) : null}
 
-            <View style={styles.contractCodeBox}>
-              <Text style={styles.contractCodeText}>{contractText}</Text>
+            <View style={styles.contractPreviewCard}>
+              <View style={styles.previewHeader}>
+                <View style={styles.previewHeaderLeft}>
+                  <Text style={styles.previewEyebrow}>KASUNDUAN VAULT · BASELINE</Text>
+                  <Text style={styles.previewDocTitle}>Freelance Service Agreement</Text>
+                  <Text style={styles.previewProjectName}>{currentProject.title}</Text>
+                </View>
+                <View style={styles.previewVersionBadge}>
+                  <Text style={styles.previewVersionText}>
+                    v{activeAgreement?.versionNumber || 1}.0 Confirmed
+                  </Text>
+                </View>
+              </View>
+
+              <View style={styles.previewDivider} />
+
+              {/* Parties */}
+              <View style={styles.previewPartiesRow}>
+                <View style={styles.previewPartyCol}>
+                  <Text style={styles.previewSectionMini}>CLIENT</Text>
+                  <Text style={styles.previewPartyName}>{currentProject.clientName || 'Client'}</Text>
+                  <Text style={styles.previewPartySub}>Principal</Text>
+                </View>
+                <View style={styles.previewPartyCol}>
+                  <Text style={styles.previewSectionMini}>FREELANCER</Text>
+                  <Text style={styles.previewPartyName}>Independent Developer</Text>
+                  <Text style={styles.previewPartySub}>Contractor</Text>
+                </View>
+              </View>
+
+              <View style={styles.previewDivider} />
+
+              {/* Agreed Commercial Terms */}
+              <Text style={styles.previewSectionMini}>AGREED COMMERCIAL TERMS</Text>
+              <View style={styles.previewTermsGrid}>
+                <View style={styles.previewTermItem}>
+                  <Text style={styles.previewTermLabel}>Total Compensation</Text>
+                  <Text style={styles.previewTermValue}>{budgetFormatted} {budgetCurrency}</Text>
+                </View>
+                <View style={styles.previewTermItem}>
+                  <Text style={styles.previewTermLabel}>Timeline</Text>
+                  <Text style={styles.previewTermValue}>{turnaroundFormatted}</Text>
+                </View>
+                <View style={styles.previewTermItem}>
+                  <Text style={styles.previewTermLabel}>Payment Method</Text>
+                  <Text style={styles.previewTermValue}>Bank Transfer / GCash / Maya</Text>
+                </View>
+                <View style={styles.previewTermItem}>
+                  <Text style={styles.previewTermLabel}>Revisions Included</Text>
+                  <Text style={styles.previewTermValue}>{revisionFormatted}</Text>
+                </View>
+              </View>
+
+              {/* Tax Compliance Callout */}
+              <View style={styles.previewTaxBox}>
+                <Text style={styles.previewTaxTitle}>EOPT Act (RA 11976) &amp; BIR Tax Compliance</Text>
+                <Text style={styles.previewTaxText}>
+                  {taxTreatmentFormatted}. Official BIR invoice issued upon milestone settlement.
+                </Text>
+              </View>
+
+              <View style={styles.previewDivider} />
+
+              {/* Confirmed Deliverables */}
+              <Text style={styles.previewSectionMini}>
+                CONFIRMED DELIVERABLES ({displayDeliverables.length})
+              </Text>
+              <View style={styles.previewDeliverablesList}>
+                {displayDeliverables.map((item) => (
+                  <View key={item.id} style={styles.previewDeliverableRow}>
+                    <View style={styles.previewReqBadge}>
+                      <Text style={styles.previewReqBadgeText}>{item.id}</Text>
+                    </View>
+                    <View style={styles.previewDelivContent}>
+                      <Text style={styles.previewDelivTitle}>{item.title}</Text>
+                      {item.description ? (
+                        <Text style={styles.previewDelivDesc} numberOfLines={2}>
+                          {item.description}
+                        </Text>
+                      ) : null}
+                    </View>
+                  </View>
+                ))}
+              </View>
+
+              {/* ScopeGuard Exclusions */}
+              {displayExclusions.length > 0 ? (
+                <>
+                  <View style={styles.previewDivider} />
+                  <Text style={styles.previewSectionMini}>SCOPEGUARD™ EXCLUSIONS</Text>
+                  <View style={styles.previewExclusionsList}>
+                    {displayExclusions.map((exc) => (
+                      <View key={exc.id} style={styles.previewExclusionRow}>
+                        <Text style={styles.previewBullet}>•</Text>
+                        <Text style={styles.previewExclusionText}>{exc.title}</Text>
+                      </View>
+                    ))}
+                  </View>
+                </>
+              ) : null}
+
+              <View style={styles.previewDivider} />
+
+              {/* Statutory Legal Protections */}
+              <Text style={styles.previewSectionMini}>STATUTORY LEGAL PROTECTIONS</Text>
+              <View style={styles.previewStatutoryBox}>
+                <Text style={styles.previewStatutoryText}>
+                  • <Text style={styles.previewBold}>RA 8293 IP Code:</Text> Deliverable copyrights transfer to Client solely upon 100% full payment settlement.
+                </Text>
+                <Text style={styles.previewStatutoryText}>
+                  • <Text style={styles.previewBold}>ScopeGuard™ Protocol:</Text> Any out-of-scope requests require a mutually signed Change Order prior to work.
+                </Text>
+                <Text style={styles.previewStatutoryText}>
+                  • <Text style={styles.previewBold}>RA 10173 Data Privacy:</Text> Proprietary data, source assets, and communications strictly protected.
+                </Text>
+              </View>
+
+              {/* Signatures Status */}
+              <View style={styles.previewSignaturesBox}>
+                <View style={styles.previewSigCol}>
+                  <Text style={styles.previewSigLabel}>FREELANCER</Text>
+                  <Text style={styles.previewSigStatus}>✓ Confirmed in Vault</Text>
+                </View>
+                <View style={styles.previewSigCol}>
+                  <Text style={styles.previewSigLabel}>CLIENT</Text>
+                  {activeAgreement?.clientApprovedAt ? (
+                    <Text style={styles.previewSigStatus}>
+                      ✓ Approved by {activeAgreement.clientSignatoryName || currentProject.clientName || 'Client'}
+                    </Text>
+                  ) : (
+                    <View style={styles.pendingSigCol}>
+                      <Text style={styles.previewSigStatusPending}>
+                        Pending Signature
+                      </Text>
+                      {onRecordClientApproval && (
+                        <Pressable
+                          style={styles.recordSigSmallBtn}
+                          onPress={() => {
+                            setContractModalOpen(false);
+                            setStandaloneSignatory(
+                              currentProject.clientName || 'Client',
+                            );
+                            setStandaloneNotes('Signed in person / PDF copy');
+                            setClientApprovalModalOpen(true);
+                          }}
+                          accessibilityRole="button"
+                          accessibilityLabel="Record client signature"
+                        >
+                          <Text style={styles.recordSigSmallBtnText}>
+                            Record Signature
+                          </Text>
+                        </Pressable>
+                      )}
+                    </View>
+                  )}
+                </View>
+              </View>
+
+              {/* Document ID footer note */}
+              <Text style={styles.previewDocRef}>
+                Ref: {activeAgreement?.id || currentProject.id} · Offline Vault Sealed Baseline
+              </Text>
             </View>
           </ScrollView>
+        </View>
+      </Modal>
+
+      {/* Standalone Client Approval Modal */}
+      <Modal
+        visible={clientApprovalModalOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setClientApprovalModalOpen(false)}
+      >
+        <Pressable
+          style={styles.modalOverlay}
+          onPress={() => setClientApprovalModalOpen(false)}
+        >
+          <Pressable
+            style={styles.approvalDialog}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.approvalModalHeader}>
+              <View>
+                <Text style={styles.approvalEyebrow}>KASUNDUAN VAULT · SIGNATURE</Text>
+                <Text style={styles.approvalModalTitle}>Record Client Approval</Text>
+              </View>
+              <Pressable
+                onPress={() => setClientApprovalModalOpen(false)}
+                hitSlop={8}
+              >
+                <Text style={styles.modalCloseIcon}>✕</Text>
+              </Pressable>
+            </View>
+
+            <Text style={styles.approvalModalDesc}>
+              Did your client approve Agreement v{activeAgreement?.versionNumber || 1}? Record it here to verify client sign-off offline.
+            </Text>
+
+            <View style={styles.inputFieldGroup}>
+              <Text style={styles.inputFieldLabel}>Client Signatory Name</Text>
+              <TextInput
+                style={styles.textInputBox}
+                value={standaloneSignatory}
+                onChangeText={setStandaloneSignatory}
+                placeholder="e.g. Maria Santos / Company Name"
+                placeholderTextColor={colors.placeholder}
+              />
+            </View>
+
+            <View style={styles.inputFieldGroup}>
+              <Text style={styles.inputFieldLabel}>Approval Method / Notes</Text>
+              <TextInput
+                style={styles.textInputBox}
+                value={standaloneNotes}
+                onChangeText={setStandaloneNotes}
+                placeholder="e.g. Signed contract PDF / Verbal confirmation / Viber chat"
+                placeholderTextColor={colors.placeholder}
+              />
+            </View>
+
+            <View style={styles.dialogActionRow}>
+              <Pressable
+                style={styles.dialogCancelBtn}
+                onPress={() => setClientApprovalModalOpen(false)}
+              >
+                <Text style={styles.dialogCancelBtnText}>Cancel</Text>
+              </Pressable>
+
+              <Pressable
+                style={styles.dialogConfirmBtn}
+                onPress={handleRecordStandaloneClientApproval}
+              >
+                <AppIcon name="check" size={15} color="#FFFFFF" />
+                <Text style={styles.dialogConfirmBtnText}>Record Approval</Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      {/* Accept Scope Change Modal */}
+      <Modal
+        visible={acceptModalOpen}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setAcceptModalOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <Pressable
+            style={styles.acceptModalCard}
+            onPress={(e) => e.stopPropagation()}
+          >
+            <View style={styles.approvalModalHeader}>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.approvalEyebrow}>SCOPE CHANGE APPROVAL</Text>
+                <Text style={styles.approvalModalTitle}>
+                  Accept Scope Change
+                </Text>
+                <Text style={styles.acceptModalSub}>
+                  Agreed with client offline? Confirm additions to seal Agreement v{((activeAgreement?.versionNumber || 1) + 1)}.
+                </Text>
+              </View>
+              <Pressable
+                onPress={() => setAcceptModalOpen(false)}
+                hitSlop={8}
+                style={{ padding: 4 }}
+              >
+                <Text style={styles.modalCloseIcon}>✕</Text>
+              </Pressable>
+            </View>
+
+            <ScrollView
+              style={styles.acceptModalScroll}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              {/* Client request text quote */}
+              {targetRequest && (
+                <View style={styles.acceptQuoteBox}>
+                  <Text style={styles.acceptQuoteLabel}>Client&apos;s request:</Text>
+                  <Text style={styles.acceptQuoteText}>
+                    &ldquo;{targetRequest.rawText}&rdquo;
+                  </Text>
+                </View>
+              )}
+
+              {/* Deliverables to add */}
+              <View style={styles.modalSection}>
+                <Text style={styles.modalSectionTitle}>
+                  Deliverables to Add to Baseline
+                </Text>
+                <View style={styles.additionsChecklist}>
+                  {selectedAdditions.map((item, idx) => (
+                    <Pressable
+                      key={idx}
+                      style={styles.additionCheckRow}
+                      onPress={() => handleToggleAddition(item)}
+                    >
+                      <View style={styles.checkboxBoxChecked}>
+                        <AppIcon name="check" size={12} color="#FFFFFF" />
+                      </View>
+                      <Text style={styles.additionCheckText}>{item}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+
+                {/* Add custom deliverable item */}
+                <View style={styles.customAddRow}>
+                  <TextInput
+                    style={styles.customAddInput}
+                    value={customAdditionText}
+                    onChangeText={setCustomAdditionText}
+                    placeholder="Add deliverable name..."
+                    placeholderTextColor={colors.placeholder}
+                    onSubmitEditing={handleAddCustomAddition}
+                  />
+                  <Pressable
+                    style={styles.customAddBtn}
+                    onPress={handleAddCustomAddition}
+                  >
+                    <Text style={styles.customAddBtnText}>+ Add</Text>
+                  </Pressable>
+                </View>
+              </View>
+
+              {/* Commercial Adjustments */}
+              <View style={styles.modalSection}>
+                <Text style={styles.modalSectionTitle}>Commercial Adjustments</Text>
+                <View style={styles.adjustmentsRow}>
+                  <View style={styles.adjCol}>
+                    <Text style={styles.adjLabel}>Additional Fee (₱)</Text>
+                    <TextInput
+                      style={styles.adjInput}
+                      value={extraFee}
+                      onChangeText={setExtraFee}
+                      keyboardType="numeric"
+                      placeholder="e.g. 7000"
+                      placeholderTextColor={colors.placeholder}
+                    />
+                  </View>
+
+                  <View style={styles.adjCol}>
+                    <Text style={styles.adjLabel}>Extra Working Days</Text>
+                    <TextInput
+                      style={styles.adjInput}
+                      value={extraDays}
+                      onChangeText={setExtraDays}
+                      keyboardType="numeric"
+                      placeholder="e.g. 5"
+                      placeholderTextColor={colors.placeholder}
+                    />
+                  </View>
+                </View>
+              </View>
+
+              {/* Optional Client Approval / Signature */}
+              <View style={styles.modalSection}>
+                <Pressable
+                  style={styles.toggleApprovalRow}
+                  onPress={() =>
+                    setRecordClientApprovalCheckbox(!recordClientApprovalCheckbox)
+                  }
+                >
+                  <View
+                    style={[
+                      styles.checkboxBox,
+                      recordClientApprovalCheckbox && styles.checkboxBoxChecked,
+                    ]}
+                  >
+                    {recordClientApprovalCheckbox ? (
+                      <AppIcon name="check" size={12} color="#FFFFFF" />
+                    ) : null}
+                  </View>
+                  <Text style={styles.toggleApprovalText}>
+                    Record client approval &amp; signature for this agreement
+                  </Text>
+                </Pressable>
+
+                {recordClientApprovalCheckbox && (
+                  <View style={styles.approvalFieldsBox}>
+                    <View style={styles.inputFieldGroup}>
+                      <Text style={styles.inputFieldLabel}>
+                        Client Signatory Name
+                      </Text>
+                      <TextInput
+                        style={styles.textInputBox}
+                        value={signatoryName}
+                        onChangeText={setSignatoryName}
+                        placeholder="Client signatory name"
+                        placeholderTextColor={colors.placeholder}
+                      />
+                    </View>
+
+                    <View style={styles.inputFieldGroup}>
+                      <Text style={styles.inputFieldLabel}>
+                        Approval Method / Notes
+                      </Text>
+                      <TextInput
+                        style={styles.textInputBox}
+                        value={approvalNotes}
+                        onChangeText={setApprovalNotes}
+                        placeholder="e.g. Agreed via WhatsApp / Signed copy"
+                        placeholderTextColor={colors.placeholder}
+                      />
+                    </View>
+                  </View>
+                )}
+              </View>
+
+              {/* Legal Notice */}
+              <View style={styles.modalLegalNotice}>
+                <AppIcon name="shield" size={14} color="#1E40AF" />
+                <Text style={styles.modalLegalNoticeText}>
+                  Creates Agreement v{((activeAgreement?.versionNumber || 1) + 1)} in your local SQLite vault enforceable under Philippine commercial law.
+                </Text>
+              </View>
+
+              <View style={styles.acceptActionsCol}>
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.acceptConfirmBtn,
+                    pressed && styles.acceptConfirmBtnPressed,
+                    isSubmittingAccept && styles.buttonDisabled,
+                  ]}
+                  onPress={handleConfirmAcceptRequest}
+                  disabled={isSubmittingAccept}
+                >
+                  <AppIcon name="check" size={16} color="#FFFFFF" />
+                  <Text style={styles.acceptConfirmBtnText}>
+                    {isSubmittingAccept
+                      ? 'Sealing agreement...'
+                      : `Confirm & Seal Agreement v${((activeAgreement?.versionNumber || 1) + 1)}`}
+                  </Text>
+                </Pressable>
+
+                <Pressable
+                  style={styles.acceptCancelBtn}
+                  onPress={() => setAcceptModalOpen(false)}
+                  disabled={isSubmittingAccept}
+                >
+                  <Text style={styles.acceptCancelBtnText}>Cancel</Text>
+                </Pressable>
+              </View>
+            </ScrollView>
+          </Pressable>
         </View>
       </Modal>
     </View>
@@ -1111,17 +1951,805 @@ const styles = StyleSheet.create({
     color: colors.successText,
     textAlign: 'center',
   },
-  contractCodeBox: {
+  contractPreviewCard: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: radii.card,
+    padding: spacing.lg,
+    gap: spacing.md,
+    ...shadows.card,
+  },
+  previewHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  previewHeaderLeft: {
+    flex: 1,
+    marginRight: spacing.sm,
+  },
+  previewEyebrow: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1.1,
+    color: colors.primary,
+    textTransform: 'uppercase',
+  },
+  previewDocTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    marginTop: 2,
+    letterSpacing: -0.3,
+  },
+  previewProjectName: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  previewVersionBadge: {
+    backgroundColor: colors.badgeBg,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: radii.full,
+    borderWidth: 1,
+    borderColor: colors.primaryMuted,
+  },
+  previewVersionText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  previewDivider: {
+    height: 1,
+    backgroundColor: colors.cardDivider,
+    marginVertical: 2,
+  },
+  previewPartiesRow: {
+    flexDirection: 'row',
+    gap: spacing.md,
+  },
+  previewPartyCol: {
+    flex: 1,
     backgroundColor: colors.surfaceSubtle,
     borderWidth: 1,
     borderColor: colors.border,
     borderRadius: radii.md,
-    padding: spacing.md,
+    padding: spacing.sm,
   },
-  contractCodeText: {
-    fontSize: 11,
-    fontFamily: 'monospace',
+  previewSectionMini: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    marginBottom: spacing.xs,
+  },
+  previewPartyName: {
+    fontSize: 13,
+    fontWeight: '700',
     color: colors.textPrimary,
+  },
+  previewPartySub: {
+    fontSize: 11,
+    color: colors.textMuted,
+    marginTop: 1,
+  },
+  previewTermsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: spacing.sm,
+  },
+  previewTermItem: {
+    width: '48%',
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    padding: spacing.sm,
+  },
+  previewTermLabel: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  previewTermValue: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    marginTop: 2,
+  },
+  previewTaxBox: {
+    backgroundColor: colors.surfaceRaised,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primary,
+    borderRadius: radii.sm,
+    padding: spacing.sm,
+    gap: 2,
+  },
+  previewTaxTitle: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  previewTaxText: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    lineHeight: 15,
+  },
+  previewDeliverablesList: {
+    gap: spacing.sm,
+  },
+  previewDeliverableRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  previewReqBadge: {
+    backgroundColor: colors.badgeBg,
+    borderRadius: radii.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderWidth: 1,
+    borderColor: colors.primaryMuted,
+  },
+  previewReqBadgeText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  previewDelivContent: {
+    flex: 1,
+  },
+  previewDelivTitle: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  previewDelivDesc: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 1,
+  },
+  previewExclusionsList: {
+    gap: 4,
+  },
+  previewExclusionRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  previewBullet: {
+    fontSize: 12,
+    color: colors.warningText,
+    fontWeight: '700',
+  },
+  previewExclusionText: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    flex: 1,
+  },
+  previewStatutoryBox: {
+    backgroundColor: colors.surfaceSubtle,
+    borderRadius: radii.md,
+    padding: spacing.sm,
+    gap: 4,
+  },
+  previewStatutoryText: {
+    fontSize: 10.5,
+    color: colors.textSecondary,
+    lineHeight: 15,
+  },
+  previewBold: {
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  previewSignaturesBox: {
+    flexDirection: 'row',
+    gap: spacing.md,
+    backgroundColor: colors.surfaceSubtle,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.md,
+    padding: spacing.sm,
+  },
+  previewSigCol: {
+    flex: 1,
+  },
+  previewSigLabel: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: colors.textMuted,
+    letterSpacing: 0.6,
+  },
+  previewSigStatus: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.successText,
+    marginTop: 2,
+  },
+  previewSigStatusPending: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: colors.warningText,
+    marginTop: 2,
+  },
+  previewDocRef: {
+    fontSize: 9.5,
+    color: colors.textMuted,
+    textAlign: 'center',
+    marginTop: spacing.xs,
+  },
+  // Client Requests Section
+  requestsSection: {
+    marginBottom: spacing.xl,
+    gap: spacing.sm,
+  },
+  requestsSectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    marginBottom: 4,
+  },
+  requestsHeaderTitleCol: {
+    flex: 1,
+  },
+  requestsSectionSub: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  addRequestSmallBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: radii.sm,
+  },
+  addRequestSmallBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  emptyRequestsCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: radii.card,
+    padding: spacing.lg,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
+    ...shadows.subtle,
+  },
+  emptyRequestsTextCol: {
+    flex: 1,
+  },
+  emptyRequestsTitle: {
+    fontSize: 13.5,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  emptyRequestsDesc: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    marginTop: 2,
     lineHeight: 16,
+  },
+  emptyAddBtn: {
+    backgroundColor: colors.primary,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: radii.sm,
+  },
+  emptyAddBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.onPrimary,
+  },
+  requestsList: {
+    gap: spacing.sm,
+  },
+  requestCard: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.cardBorder,
+    borderRadius: radii.card,
+    padding: spacing.md + 2,
+    gap: spacing.xs + 2,
+    ...shadows.subtle,
+  },
+  requestCardHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  requestDate: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  requestStatusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: radii.full,
+    borderWidth: 1,
+  },
+  requestStatusBadgeAccepted: {
+    backgroundColor: '#DCFCE7',
+    borderColor: '#BBF7D0',
+  },
+  requestStatusBadgePending: {
+    backgroundColor: '#FEF3C7',
+    borderColor: '#FDE68A',
+  },
+  requestStatusText: {
+    fontSize: 11,
+    fontWeight: '700',
+  },
+  requestStatusTextAccepted: {
+    color: '#15803D',
+  },
+  requestStatusTextPending: {
+    color: '#B45309',
+  },
+  requestQuoteBox: {
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radii.sm,
+    padding: spacing.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primary,
+  },
+  requestQuoteText: {
+    fontSize: 13,
+    fontStyle: 'italic',
+    color: colors.textPrimary,
+    lineHeight: 18,
+  },
+  findingsPillsRow: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  additionPill: {
+    backgroundColor: '#FEF3C7',
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+    borderRadius: radii.sm,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  additionPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#92400E',
+  },
+  includedPill: {
+    backgroundColor: '#ECFDF5',
+    borderWidth: 1,
+    borderColor: '#A7F3D0',
+    borderRadius: radii.sm,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
+  includedPillText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#047857',
+  },
+  requestActionsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 2,
+  },
+  acceptRequestBtn: {
+    backgroundColor: '#15803D',
+    borderRadius: radii.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  acceptRequestBtnPressed: {
+    backgroundColor: '#166534',
+  },
+  acceptRequestBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  reviewRequestBtn: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+  },
+  reviewRequestBtnPressed: {
+    backgroundColor: colors.surfaceRaised,
+  },
+  reviewRequestBtnText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.primary,
+  },
+  deleteRequestBtn: {
+    padding: 6,
+    marginLeft: 'auto',
+  },
+  acceptedNoticeRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingVertical: 2,
+  },
+  acceptedNoticeText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#15803D',
+  },
+  checkApprovalRow: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  recordBadgeBtn: {
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: radii.sm,
+  },
+  recordBadgeBtnText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  pendingSigCol: {
+    gap: 4,
+  },
+  recordSigSmallBtn: {
+    backgroundColor: colors.primaryLight,
+    borderWidth: 1,
+    borderColor: colors.primary,
+    borderRadius: radii.sm,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    alignSelf: 'flex-start',
+    marginTop: 2,
+  },
+  recordSigSmallBtnText: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  // Standalone Approval Dialog
+  approvalDialog: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    padding: spacing.xl,
+    width: '100%',
+    maxWidth: 380,
+    gap: spacing.md,
+    ...shadows.modal,
+  },
+  approvalModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  approvalEyebrow: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 1,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+  },
+  approvalModalTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: colors.textPrimary,
+    marginTop: 2,
+  },
+  modalCloseIcon: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    padding: 4,
+  },
+  approvalModalDesc: {
+    fontSize: 13,
+    color: colors.textSecondary,
+    lineHeight: 18,
+  },
+  inputFieldGroup: {
+    gap: 4,
+  },
+  inputFieldLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  textInputBox: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13.5,
+    color: colors.textPrimary,
+    backgroundColor: colors.background,
+  },
+  dialogActionRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: spacing.sm,
+    marginTop: spacing.xs,
+  },
+  dialogCancelBtn: {
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderRadius: radii.sm,
+  },
+  dialogCancelBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  dialogConfirmBtn: {
+    backgroundColor: '#15803D',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: radii.sm,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  dialogConfirmBtnText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  // Accept Scope Change Modal
+  acceptModalCard: {
+    backgroundColor: colors.surface,
+    borderRadius: radii.card,
+    padding: spacing.xl,
+    width: '100%',
+    maxWidth: 440,
+    maxHeight: '88%',
+    ...shadows.modal,
+  },
+  acceptModalSub: {
+    fontSize: 12.5,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  acceptModalScroll: {
+    marginVertical: spacing.sm,
+  },
+  acceptQuoteBox: {
+    backgroundColor: colors.surfaceRaised,
+    borderRadius: radii.sm,
+    padding: spacing.sm,
+    borderLeftWidth: 3,
+    borderLeftColor: colors.primary,
+    marginBottom: spacing.md,
+  },
+  acceptQuoteLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textSecondary,
+    marginBottom: 2,
+  },
+  acceptQuoteText: {
+    fontSize: 12.5,
+    fontStyle: 'italic',
+    color: colors.textPrimary,
+    lineHeight: 17,
+  },
+  modalSection: {
+    marginBottom: spacing.md,
+    gap: spacing.xs,
+  },
+  modalSectionTitle: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: colors.textPrimary,
+  },
+  additionsChecklist: {
+    gap: 6,
+  },
+  additionCheckRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: colors.surfaceRaised,
+    paddingVertical: 7,
+    paddingHorizontal: 10,
+    borderRadius: radii.sm,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+  checkboxBox: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  checkboxBoxChecked: {
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    backgroundColor: '#15803D',
+    borderColor: '#15803D',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  additionCheckText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  customAddRow: {
+    flexDirection: 'row',
+    gap: 6,
+    marginTop: 4,
+  },
+  customAddInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.sm,
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    fontSize: 12.5,
+    color: colors.textPrimary,
+    backgroundColor: colors.background,
+  },
+  customAddBtn: {
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 10,
+    justifyContent: 'center',
+    borderRadius: radii.sm,
+  },
+  customAddBtnText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.primary,
+  },
+  adjustmentsRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  adjCol: {
+    flex: 1,
+    gap: 2,
+  },
+  adjLabel: {
+    fontSize: 11.5,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  adjInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.sm,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    fontSize: 13,
+    color: colors.textPrimary,
+    backgroundColor: colors.background,
+  },
+  toggleApprovalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 4,
+  },
+  toggleApprovalText: {
+    fontSize: 12.5,
+    fontWeight: '700',
+    color: colors.textPrimary,
+    flex: 1,
+  },
+  approvalFieldsBox: {
+    backgroundColor: colors.surfaceRaised,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radii.sm,
+    padding: spacing.sm,
+    gap: spacing.xs,
+    marginTop: 4,
+  },
+  modalLegalNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
+    backgroundColor: '#EFF6FF',
+    borderWidth: 1,
+    borderColor: '#BFDBFE',
+    borderRadius: radii.sm,
+    padding: spacing.sm,
+    marginBottom: spacing.md,
+  },
+  modalLegalNoticeText: {
+    fontSize: 11,
+    color: '#1E40AF',
+    flex: 1,
+    lineHeight: 15,
+  },
+  acceptActionsCol: {
+    gap: 6,
+  },
+  acceptConfirmBtn: {
+    backgroundColor: '#15803D',
+    borderRadius: radii.button,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+  },
+  acceptConfirmBtnPressed: {
+    backgroundColor: '#166534',
+  },
+  acceptConfirmBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  acceptCancelBtn: {
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  acceptCancelBtnText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  buttonDisabled: {
+    opacity: 0.5,
+  },
+  deleteProjectOutlineBtn: {
+    borderWidth: 1,
+    borderColor: colors.errorBorder || '#FCA5A5',
+    backgroundColor: colors.surface,
+    borderRadius: radii.button,
+    paddingVertical: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: -spacing.sm,
+    marginBottom: spacing.xl,
+  },
+  deleteProjectOutlineBtnPressed: {
+    backgroundColor: '#FEF2F2',
+  },
+  deleteProjectOutlineText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.errorText,
   },
 });

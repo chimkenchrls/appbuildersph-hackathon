@@ -80,18 +80,9 @@ export function ScopeReviewScreen({
     });
   };
 
-  const potentialEvidenceIds = formatEvidenceIds(potentialAdditions, [
-    'REQ-01',
-    'REQ-02',
-  ]);
-  const includedEvidenceIds = formatEvidenceIds(includedItems, [
-    'REQ-02',
-    'REQ-03',
-  ]);
-  const clarificationEvidenceIds = formatEvidenceIds(needsClarification, [
-    'REQ-01',
-    'REQ-03',
-  ]);
+  const potentialEvidenceIds = formatEvidenceIds(potentialAdditions, []);
+  const includedEvidenceIds = formatEvidenceIds(includedItems, []);
+  const clarificationEvidenceIds = formatEvidenceIds(needsClarification, []);
 
   const formatItemTitle = (raw: string): string => {
     const trimmed = raw.trim();

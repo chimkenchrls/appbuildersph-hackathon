@@ -1,5 +1,5 @@
 {
-  "name": "diligent-dev",
+  "name": "owlset",
   "version": "1.0.0",
   "private": true,
   "description": "Hackathon starter for web, Android, and iOS",
@@ -25,8 +25,10 @@
     "expo-clipboard": "~57.0.2",
     "expo-constants": "~57.0.21",
     "expo-dev-client": "~57.0.19",
+    "expo-document-picker": "~57.0.3",
     "expo-font": "~57.0.4",
     "expo-haptics": "~57.0.3",
+    "expo-image-picker": "~57.0.20",
     "expo-keep-awake": "~57.0.2",
     "expo-linking": "~57.0.12",
     "expo-print": "~57.0.2",

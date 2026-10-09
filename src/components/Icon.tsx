@@ -34,7 +34,9 @@ export type IconName =
   | 'scan-text'
   | 'clipboard'
   | 'copy'
-  | 'printer';
+  | 'printer'
+  | 'trash'
+  | 'x';
 
 interface IconProps {
   name: IconName;
@@ -44,6 +46,8 @@ interface IconProps {
 
 export function AppIcon({ name, size = 20, color = colors.textPrimary }: IconProps) {
   switch (name) {
+    case 'x':
+      return <Feather name="x" size={size} color={color} />;
     case 'projects':
       return <Feather name="layers" size={size} color={color} />;
     case 'agreements':
@@ -62,6 +66,8 @@ export function AppIcon({ name, size = 20, color = colors.textPrimary }: IconPro
       return <Feather name="copy" size={size} color={color} />;
     case 'printer':
       return <Feather name="printer" size={size} color={color} />;
+    case 'trash':
+      return <Feather name="trash-2" size={size} color={color} />;
     case 'image':
       return <Feather name="image" size={size} color={color} />;
     case 'send':

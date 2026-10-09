@@ -17,13 +17,13 @@ export function HeaderBar({
   onBack,
   showBack = false,
 }: HeaderBarProps) {
-  const isRootBrand = !showBack && title === 'Saklaw';
+  const isRootBrand = !showBack && (title === 'OwlSet' || title === 'Saklaw');
 
   return (
     <View style={styles.container}>
       {isRootBrand ? (
         <View style={styles.rootBrandContent}>
-          <Text style={styles.brandTitle}>Saklaw</Text>
+          <Text style={styles.brandTitle}>OwlSet</Text>
           <Text style={styles.brandSubtitle}>
             {subtitle || 'Your Private Workspace'}
           </Text>

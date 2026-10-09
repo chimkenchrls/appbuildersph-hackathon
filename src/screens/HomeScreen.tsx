@@ -28,6 +28,7 @@ import type {
   ScopeDraft,
   ScopeGuardAnalysis,
   ChangeProposal,
+  ClientRequest,
 } from '@/types/domain';
 
 type SubScreen =
@@ -54,8 +55,12 @@ export function HomeScreen() {
   // Domain states
   const [projects, setProjects] = useState<Project[]>([]);
   const [projectAgreements, setProjectAgreements] = useState<Record<string, Agreement[]>>({});
+  const [projectRequests, setProjectRequests] = useState<Record<string, ClientRequest[]>>({});
+  const [analysesMap, setAnalysesMap] = useState<Record<string, ScopeGuardAnalysis>>({});
+  const [proposalsMap, setProposalsMap] = useState<Record<string, ChangeProposal>>({});
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [selectedAgreement, setSelectedAgreement] = useState<Agreement | null>(null);
+  const [currentDraftProjectId, setCurrentDraftProjectId] = useState<string | null>(null);
 
   const [activeDraft, setActiveDraft] = useState<ScopeDraft | null>(null);
   const [analysis, setAnalysis] = useState<ScopeGuardAnalysis | null>(null);
@@ -68,12 +73,31 @@ export function HomeScreen() {
     async function initialize() {
       try {
         const backend = await initializeBackendAsync();
+        // Clean up duplicate projects if any exist in the database
+        await backend.repositories.project.cleanupDuplicates();
         const loadedProjects = await backend.repositories.project.list();
 
         const agreementsMap: Record<string, Agreement[]> = {};
+        const requestsMap: Record<string, ClientRequest[]> = {};
+        const analysesDict: Record<string, ScopeGuardAnalysis> = {};
+        const proposalsDict: Record<string, ChangeProposal> = {};
+
         for (const proj of loadedProjects) {
           const agmts = await backend.repositories.agreement.listByProjectId(proj.id);
           agreementsMap[proj.id] = agmts;
+
+          const reqs = await backend.repositories.scopeGuard.listRequestsByProjectId(proj.id);
+          requestsMap[proj.id] = reqs;
+
+          const proAnalyses = await backend.repositories.scopeGuard.listAnalysesByProjectId(proj.id);
+          for (const a of proAnalyses) {
+            analysesDict[a.requestId] = a;
+          }
+
+          const proProposals = await backend.repositories.proposal.listByProjectId(proj.id);
+          for (const p of proProposals) {
+            proposalsDict[p.analysisId] = p;
+          }
         }
 
         let latestAnalysis: ScopeGuardAnalysis | null = null;
@@ -99,6 +123,9 @@ export function HomeScreen() {
           setServices(backend);
           setProjects(loadedProjects);
           setProjectAgreements(agreementsMap);
+          setProjectRequests(requestsMap);
+          setAnalysesMap(analysesDict);
+          setProposalsMap(proposalsDict);
           setSelectedProjectId(defaultProjId);
 
           if (defaultProjId && agreementsMap[defaultProjId]?.length > 0) {
@@ -129,16 +156,61 @@ export function HomeScreen() {
     try {
       const loadedProjects = await services.repositories.project.list();
       const agreementsMap: Record<string, Agreement[]> = {};
+      const requestsMap: Record<string, ClientRequest[]> = {};
+      const analysesDict: Record<string, ScopeGuardAnalysis> = {};
+      const proposalsDict: Record<string, ChangeProposal> = {};
+
       for (const proj of loadedProjects) {
         const agmts = await services.repositories.agreement.listByProjectId(proj.id);
         agreementsMap[proj.id] = agmts;
+
+        const reqs = await services.repositories.scopeGuard.listRequestsByProjectId(proj.id);
+        requestsMap[proj.id] = reqs;
+
+        const proAnalyses = await services.repositories.scopeGuard.listAnalysesByProjectId(proj.id);
+        for (const a of proAnalyses) {
+          analysesDict[a.requestId] = a;
+        }
+
+        const proProposals = await services.repositories.proposal.listByProjectId(proj.id);
+        for (const p of proProposals) {
+          proposalsDict[p.analysisId] = p;
+        }
       }
+
       setProjects(loadedProjects);
       setProjectAgreements(agreementsMap);
+      setProjectRequests(requestsMap);
+      setAnalysesMap(analysesDict);
+      setProposalsMap(proposalsDict);
     } catch {
       // ignore
     }
   }, [services]);
+
+  const refreshProjectRequests = useCallback(
+    async (projectId: string) => {
+      if (!services) return;
+      try {
+        const reqs = await services.repositories.scopeGuard.listRequestsByProjectId(projectId);
+        setProjectRequests((prev) => ({
+          ...prev,
+          [projectId]: reqs,
+        }));
+        const proAnalyses = await services.repositories.scopeGuard.listAnalysesByProjectId(projectId);
+        setAnalysesMap((prev) => {
+          const updated = { ...prev };
+          for (const a of proAnalyses) {
+            updated[a.requestId] = a;
+          }
+          return updated;
+        });
+      } catch {
+        // ignore
+      }
+    },
+    [services],
+  );
 
   const activeProject = useMemo(() => {
     return (
@@ -165,45 +237,22 @@ export function HomeScreen() {
     return activeAgreements[0] || null;
   }, [selectedAgreement, activeProject, activeAgreements]);
 
-  // Default fallback draft matching the design specification
+  // Default fallback draft
   const defaultDraft: ScopeDraft = useMemo(() => {
     return {
-      title: activeProject ? activeProject.title : 'Harbor Studio',
-      requirements: [
-        {
-          id: 'REQ-01',
-          title: 'Five responsive pages',
-          description: 'Home, About, Services, Work and Contact.',
-          category: 'deliverable',
-        },
-        {
-          id: 'REQ-02',
-          title: 'Contact form',
-          description: 'Send enquiries to the client.',
-          category: 'deliverable',
-        },
-        {
-          id: 'REQ-03',
-          title: 'Design revisions',
-          description: 'Two rounds of revisions to the agreed pages and contact form.',
-          category: 'term',
-        },
-      ],
-      budgetAmount: 15000,
+      title: activeProject ? activeProject.title : 'Project Scope',
+      requirements: [],
+      budgetAmount: null,
       budgetCurrency: 'PHP',
-      budgetNotes: 'Agreed fixed price for initial scope.',
-      durationDays: 14,
+      budgetNotes: null,
+      durationDays: null,
       deadline: null,
-      timelineNotes: '2 weeks turnaround from deposit.',
-      revisionTerms: 'Two rounds of revisions included. Additional revisions quoted separately.',
-      exclusions: [
-        'User account authentication and member portal',
-        'Appointment booking calendar engine',
-      ],
-      missingInformation: [
-        'Delivery date is missing. Add the agreed date before confirming.',
-      ],
+      timelineNotes: null,
+      revisionTerms: null,
+      exclusions: [],
+      missingInformation: [],
       taxTreatment: 'none_specified',
+      extractedWithAi: false,
     };
   }, [activeProject]);
 
@@ -365,6 +414,16 @@ export function HomeScreen() {
   }) => {
     if (!services) return;
 
+    const normalizedName = data.projectName.trim().toLowerCase();
+    const existingDuplicate = projects.find(
+      (p) =>
+        p.id !== currentDraftProjectId &&
+        p.title.trim().toLowerCase() === normalizedName,
+    );
+    if (existingDuplicate) {
+      throw new Error(`A project named "${data.projectName}" already exists.`);
+    }
+
     // Fast brief extraction (local LLM or instant heuristic fallback)
     let extractedDraft: ScopeDraft;
     try {
@@ -373,25 +432,51 @@ export function HomeScreen() {
         data.projectName,
       );
       extractedDraft.title = data.projectName;
+      extractedDraft.sourceConversation = data.conversation;
     } catch {
       extractedDraft = services.services.briefCraft.extractBriefHeuristic(
         data.conversation,
         data.projectName,
       );
+      extractedDraft.sourceConversation = data.conversation;
     }
 
-    // Persist project with draftScopeJson in SQLite
-    const newProjId = `proj_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-    const newProj = await services.repositories.project.create({
-      id: newProjId,
-      title: data.projectName,
-      clientName: data.projectName,
-      description: data.projectField,
-      draftScopeJson: JSON.stringify(extractedDraft),
-    });
+    let targetProj: Project;
+    if (currentDraftProjectId) {
+      // Re-use and update existing unconfirmed draft project from this session instead of creating duplicate
+      const updated = await services.repositories.project.update(currentDraftProjectId, {
+        title: data.projectName,
+        clientName: data.projectName,
+        description: data.projectField,
+        draftScopeJson: JSON.stringify(extractedDraft),
+      });
+      targetProj = updated || {
+        id: currentDraftProjectId,
+        title: data.projectName,
+        clientName: data.projectName,
+        description: data.projectField,
+        draftScopeJson: JSON.stringify(extractedDraft),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      setProjects((prev) =>
+        prev.map((p) => (p.id === currentDraftProjectId ? targetProj : p)),
+      );
+    } else {
+      // Persist project with draftScopeJson in SQLite
+      const newProjId = `proj_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+      targetProj = await services.repositories.project.create({
+        id: newProjId,
+        title: data.projectName,
+        clientName: data.projectName,
+        description: data.projectField,
+        draftScopeJson: JSON.stringify(extractedDraft),
+      });
+      setCurrentDraftProjectId(newProjId);
+      setProjects((prev) => [targetProj, ...prev.filter((p) => p.id !== newProjId)]);
+    }
 
-    setProjects((prev) => [newProj, ...prev]);
-    setSelectedProjectId(newProjId);
+    setSelectedProjectId(targetProj.id);
     setActiveDraft(extractedDraft);
     setDraftReturnScreen('new_project');
     navigateToSubScreen('draft', 'forward');
@@ -400,6 +485,7 @@ export function HomeScreen() {
   const handleConfirmScope = async (draftToConfirm: ScopeDraft) => {
     if (!services || !activeProject) return;
     try {
+      setCurrentDraftProjectId(null);
       // Update draftScopeJson in SQLite
       await services.repositories.project.update(activeProject.id, {
         draftScopeJson: JSON.stringify(draftToConfirm),
@@ -420,6 +506,36 @@ export function HomeScreen() {
     }
   };
 
+  const handleDeleteProject = async (projectId: string) => {
+    if (!services) return;
+    try {
+      await services.repositories.project.delete(projectId);
+      setProjects((prev) => prev.filter((p) => p.id !== projectId));
+      setProjectAgreements((prev) => {
+        const next = { ...prev };
+        delete next[projectId];
+        return next;
+      });
+      setProjectRequests((prev) => {
+        const next = { ...prev };
+        delete next[projectId];
+        return next;
+      });
+      if (selectedProjectId === projectId) {
+        const remaining = projects.filter((p) => p.id !== projectId);
+        setSelectedProjectId(remaining[0]?.id || null);
+      }
+      if (currentDraftProjectId === projectId) {
+        setCurrentDraftProjectId(null);
+      }
+      if (subScreen === 'overview') {
+        navigateToSubScreen(null, 'backward');
+      }
+    } catch {
+      // ignore
+    }
+  };
+
   const handleAnalyzeRequest = async (requestText: string) => {
     if (!services || !activeProject) return;
 
@@ -434,23 +550,196 @@ export function HomeScreen() {
       });
       setAnalysis(newAnalysis);
 
-      // Generate proposal draft
+      // Generate proposal draft from findings
+      const potentialItems = newAnalysis.findings
+        .filter((f) => f.classification === 'potential_additional')
+        .map((f) => f.item);
+
       const newProposal = await services.services.changeDesk.draftProposal({
         projectId: activeProject.id,
         analysisId: newAnalysis.id,
-        selectedItems: newAnalysis.findings
-          .filter((f) => f.classification === 'potential_additional')
-          .map((f) => f.item),
-        freelancerFeeEstimate: 7000,
-        freelancerDaysEstimate: 5,
+        selectedItems: potentialItems,
+        freelancerFeeEstimate: 0,
+        freelancerDaysEstimate: 0,
         currency: targetAgreement.budgetCurrency || 'PHP',
       });
       setProposal(newProposal);
 
+      await refreshProjectRequests(activeProject.id);
       navigateToSubScreen('review', 'forward');
     } catch {
       // Offline fallback
       navigateToSubScreen('review', 'forward');
+    }
+  };
+
+  const handleSaveRequest = async (requestText: string) => {
+    if (!services || !activeProject) return;
+
+    try {
+      const targetAgreement = activeAgreement || activeAgreements[0];
+      if (!targetAgreement) return;
+
+      const newAnalysis = await services.services.scopeGuard.analyzeRequest({
+        projectId: activeProject.id,
+        agreementId: targetAgreement.id,
+        requestText,
+      });
+      setAnalysis(newAnalysis);
+
+      const potentialItems = newAnalysis.findings
+        .filter((f) => f.classification === 'potential_additional')
+        .map((f) => f.item);
+
+      const newProposal = await services.services.changeDesk.draftProposal({
+        projectId: activeProject.id,
+        analysisId: newAnalysis.id,
+        selectedItems: potentialItems,
+        freelancerFeeEstimate: 0,
+        freelancerDaysEstimate: 0,
+        currency: targetAgreement.budgetCurrency || 'PHP',
+      });
+      setProposal(newProposal);
+
+      await refreshProjectRequests(activeProject.id);
+      navigateToSubScreen('overview', 'backward');
+    } catch {
+      navigateToSubScreen('overview', 'backward');
+    }
+  };
+
+  const handleAcceptRequest = async (
+    request: ClientRequest,
+    additions: string[],
+    additionalFee: number | null,
+    additionalDays: number | null,
+    signatoryName?: string | null,
+    approvalNotes?: string | null,
+  ) => {
+    if (!services || !activeProject) return;
+    const targetAgreement = activeAgreement || activeAgreements[0];
+    if (!targetAgreement) return;
+
+    try {
+      const nextAgmt = await services.services.kasunduanVault.acceptScopeChange({
+        projectId: activeProject.id,
+        currentAgreement: targetAgreement,
+        additionalDeliverables: additions,
+        additionalFee: additionalFee ?? undefined,
+        additionalDays: additionalDays ?? undefined,
+        clientSignatoryName: signatoryName || undefined,
+        clientSignatureData: approvalNotes || undefined,
+      });
+
+      await services.repositories.scopeGuard.updateRequestStatus(
+        request.id,
+        'accepted',
+        new Date().toISOString(),
+      );
+
+      setProjectAgreements((prev) => ({
+        ...prev,
+        [activeProject.id]: [nextAgmt, ...(prev[activeProject.id] || [])],
+      }));
+      setSelectedAgreement(nextAgmt);
+      await refreshProjectRequests(activeProject.id);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleRecordClientApproval = async (
+    agreementId: string,
+    signatoryName: string,
+    signatureNotes?: string,
+  ) => {
+    if (!services || !activeProject) return;
+    try {
+      const updatedAgmt = await services.services.kasunduanVault.recordClientApproval(
+        agreementId,
+        signatoryName,
+        signatureNotes,
+      );
+      if (!updatedAgmt) return;
+
+      setProjectAgreements((prev) => ({
+        ...prev,
+        [activeProject.id]: (prev[activeProject.id] || []).map((agmt) =>
+          agmt.id === agreementId ? updatedAgmt : agmt,
+        ),
+      }));
+      if (selectedAgreement?.id === agreementId) {
+        setSelectedAgreement(updatedAgmt);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleDeleteRequest = async (requestId: string) => {
+    if (!services || !activeProject) return;
+    try {
+      await services.services.scopeGuard.deleteRequest(requestId);
+      await refreshProjectRequests(activeProject.id);
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleReviewStoredRequest = (request: ClientRequest) => {
+    const matchedAnalysis = analysesMap[request.id];
+    if (matchedAnalysis) {
+      setAnalysis(matchedAnalysis);
+      const matchedProposal = proposalsMap[matchedAnalysis.id];
+      if (matchedProposal) {
+        setProposal(matchedProposal);
+      }
+    }
+    navigateToSubScreen('review', 'forward');
+  };
+
+  const handleAcceptProposalFromScreen = async (
+    selectedItems?: string[],
+    fee?: number | null,
+    days?: number | null,
+  ) => {
+    if (!services || !activeProject) return;
+    const targetAgreement = activeAgreement || activeAgreements[0];
+    if (!targetAgreement) return;
+
+    const additionsToInclude =
+      selectedItems && selectedItems.length > 0
+        ? selectedItems
+        : proposal?.selectedItems && proposal.selectedItems.length > 0
+        ? proposal.selectedItems
+        : ['Additional client requested deliverables'];
+
+    try {
+      const nextAgmt = await services.services.kasunduanVault.acceptScopeChange({
+        projectId: activeProject.id,
+        currentAgreement: targetAgreement,
+        additionalDeliverables: additionsToInclude,
+        additionalFee: fee ?? (proposal?.freelancerFeeEstimate ?? undefined),
+        additionalDays: days ?? (proposal?.freelancerDaysEstimate ?? undefined),
+      });
+
+      if (analysis?.requestId) {
+        await services.repositories.scopeGuard.updateRequestStatus(
+          analysis.requestId,
+          'accepted',
+          new Date().toISOString(),
+        );
+      }
+
+      setProjectAgreements((prev) => ({
+        ...prev,
+        [activeProject.id]: [nextAgmt, ...(prev[activeProject.id] || [])],
+      }));
+      setSelectedAgreement(nextAgmt);
+      await refreshProjectRequests(activeProject.id);
+      navigateToSubScreen('overview', 'backward');
+    } catch {
+      navigateToSubScreen('overview', 'backward');
     }
   };
 
@@ -468,7 +757,7 @@ export function HomeScreen() {
     return (
       <SafeAreaView style={styles.loadingScreen}>
         <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={styles.loadingText}>Loading Saklaw workspace...</Text>
+        <Text style={styles.loadingText}>Loading OwlSet workspace...</Text>
       </SafeAreaView>
     );
   }
@@ -495,7 +784,12 @@ export function HomeScreen() {
           {/* Sub-screens (Focused Module Flows) */}
           {subScreen === 'new_project' && (
             <NewProjectScreen
-              onBack={() => navigateToSubScreen(null, 'backward')}
+              services={services}
+              existingProjects={projects}
+              onBack={() => {
+                setCurrentDraftProjectId(null);
+                navigateToSubScreen(null, 'backward');
+              }}
               onCreateScopeDraft={handleCreateScopeDraft}
             />
           )}
@@ -515,6 +809,9 @@ export function HomeScreen() {
               allProjects={projects}
               agreements={activeAgreements}
               selectedAgreement={activeAgreement}
+              requests={projectRequests[activeProject.id] || []}
+              analyses={analysesMap}
+              proposals={proposalsMap}
               onSelectProject={(id) => {
                 setSelectedProjectId(id);
                 const agmts = projectAgreements[id] || [];
@@ -522,6 +819,11 @@ export function HomeScreen() {
               }}
               onSelectAgreementVersion={handleSelectAgreementVersion}
               onNavigateToNewRequest={() => navigateToSubScreen('new_request', 'forward')}
+              onReviewRequest={handleReviewStoredRequest}
+              onAcceptRequest={handleAcceptRequest}
+              onRecordClientApproval={handleRecordClientApproval}
+              onDeleteRequest={handleDeleteRequest}
+              onDeleteProject={handleDeleteProject}
               onBack={() => navigateToSubScreen(null, 'backward')}
               onReleaseScope={() => handleReleaseProjectScope(activeProject.id)}
               onEditScopeDraft={() => handleEditProjectDraft(activeProject.id)}
@@ -533,6 +835,7 @@ export function HomeScreen() {
               project={activeProject}
               agreement={activeAgreement}
               onBack={() => navigateToSubScreen('overview', 'backward')}
+              onSaveRequest={handleSaveRequest}
               onAnalyze={handleAnalyzeRequest}
               onViewConfirmedScope={() => navigateToSubScreen('overview', 'backward')}
             />
@@ -546,38 +849,11 @@ export function HomeScreen() {
                 analysis || {
                   id: 'ana_fallback',
                   requestId: 'req_fallback',
-                  agreementId: activeAgreement?.id || 'agmt_demo',
+                  agreementId: activeAgreement?.id || '',
                   classification: 'potential_additional',
-                  summary: 'Compared with Agreement v2. You decide what belongs in scope.',
-                  findings: [
-                    {
-                      item: 'Customer accounts',
-                      classification: 'potential_additional',
-                      explanation: 'An account system is not listed in the recorded deliverables.',
-                      evidenceRequirementIds: ['REQ-01', 'REQ-02'],
-                    },
-                    {
-                      item: 'Appointment booking',
-                      classification: 'potential_additional',
-                      explanation: 'The agreed pages and enquiry form do not describe booking functionality.',
-                      evidenceRequirementIds: ['REQ-01', 'REQ-02'],
-                    },
-                    {
-                      item: 'Contact form colour update',
-                      classification: 'included',
-                      explanation: 'Fits the agreed contact form and revision terms. Confirm a revision round is available.',
-                      evidenceRequirementIds: ['REQ-02', 'REQ-03'],
-                    },
-                    {
-                      item: '“Make it feel more premium”',
-                      classification: 'needs_clarification',
-                      explanation: 'Which pages or visual details should change? Ask for examples before classifying.',
-                      evidenceRequirementIds: ['REQ-01', 'REQ-03'],
-                    },
-                  ],
-                  clarificationQuestions: [
-                    'Which pages or visual details should change? Ask for examples before classifying.',
-                  ],
+                  summary: 'No active analysis. Enter a request to evaluate against your baseline agreement.',
+                  findings: [],
+                  clarificationQuestions: [],
                   createdAt: new Date().toISOString(),
                 }
               }
@@ -594,13 +870,13 @@ export function HomeScreen() {
                 proposal || {
                   id: 'prop_fallback',
                   projectId: activeProject.id,
-                  analysisId: 'ana_fallback',
-                  selectedItems: ['Customer accounts', 'Appointment booking'],
+                  analysisId: analysis?.id || 'ana_fallback',
+                  selectedItems: [],
                   freelancerFeeEstimate: null,
                   freelancerDaysEstimate: null,
-                  currency: 'PHP',
+                  currency: activeAgreement?.budgetCurrency || 'PHP',
                   draftMessage:
-                    "Hi! Thanks for sharing the updates. Customer accounts and appointment booking would add to the pages and contact form in our current scope. Please review this proposed change and let me know if you would like to proceed. I'll record your approval before starting the additional work.",
+                    'Hi! Thanks for sharing your request. Based on our agreed scope, the requested changes introduce additional deliverables. Please review this proposed change and let me know if you would like to proceed.',
                   status: 'draft',
                   createdAt: new Date().toISOString(),
                   updatedAt: new Date().toISOString(),
@@ -614,6 +890,7 @@ export function HomeScreen() {
                   : ['Customer accounts', 'Appointment booking']
               }
               onBack={() => navigateToSubScreen('review', 'backward')}
+              onAcceptProposal={handleAcceptProposalFromScreen}
               onSaveProposal={async (updatedProp) => {
                 if (services) {
                   try {
@@ -652,8 +929,12 @@ export function HomeScreen() {
                     projectAgreements={projectAgreements}
                     onSelectProject={handleSelectProject}
                     onViewProjectOverview={handleViewProjectOverview}
-                    onNewProject={() => navigateToSubScreen('new_project', 'forward')}
+                    onNewProject={() => {
+                      setCurrentDraftProjectId(null);
+                      navigateToSubScreen('new_project', 'forward');
+                    }}
                     onReleaseProject={handleReleaseProjectScope}
+                    onDeleteProject={handleDeleteProject}
                   />
                 )}
 
@@ -662,7 +943,10 @@ export function HomeScreen() {
                     projects={projects}
                     projectAgreements={projectAgreements}
                     onSelectProjectAgreement={handleSelectProjectAgreementFromVault}
-                    onNewProject={() => navigateToSubScreen('new_project', 'forward')}
+                    onNewProject={() => {
+                      setCurrentDraftProjectId(null);
+                      navigateToSubScreen('new_project', 'forward');
+                    }}
                   />
                 )}
 
