@@ -71,7 +71,8 @@ npx expo-doctor
 ```text
 src/
   app/                    # Expo Router route definitions and root layout
-  components/             # Shared UI components
+  components/ui/          # Shared UI components (Screen, Button, TextField, StatusBadge, ...)
+  constants/theme.ts      # Mint Slate design tokens
   database/
     client.ts             # SQLite connection and foreign key pragmas
     migrate.ts            # Migration execution runner
@@ -92,10 +93,20 @@ src/
     shareService.ts       # Native OS share sheet dispatcher
     exportService.ts      # Offline JSON import and export
     bootstrapService.ts   # Database migration, seeding, and engine initialization
-  screens/
-    HomeScreen.tsx        # Diagnostics and live contract sharing screen
+    contracts.ts          # SaklawData and SaklawAi: the two interfaces the mobile screens call
+    active.ts             # The implementations the screens use: the backend, or fixtures in tests
+    backend/              # Adapters from the backend repositories, services, and AI engine to the contracts
+    workflows.ts          # Extraction, confirmation, analysis, and proposal glue for the screens
+    fixtures/             # In-memory data and prepared AI output for tests and EXPO_PUBLIC_SAKLAW_FIXTURES=1
+  features/               # Feature hooks and components (projects, scope, request, proposal, ai)
+  hooks/                  # useOperation, useExitGuard
+  safety/                 # Evidence, estimate, and draft validation used by the screens
+  screens/                # Dashboard, workspace, ScopeGuard, and proposal screens;
+                          # .web.tsx siblings keep the web export to a placeholder
+    HomeScreen.tsx        # Diagnostics and live contract sharing screen (not routed)
   types/
     domain.ts             # TypeScript domain interfaces
+    workspace.ts          # Contract types used by the mobile screens
     schemas.ts            # Zod validation schemas
 ```
 
@@ -106,8 +117,10 @@ src/
 Run these checks before committing code:
 
 ```sh
-npx expo lint
-npx tsc --noEmit
+npm run lint
+npm run typecheck
+npm test
+npm run check:dependencies
 npx expo-doctor
 npm run build:web
 ```
