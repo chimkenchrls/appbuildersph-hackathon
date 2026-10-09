@@ -24,17 +24,22 @@ The checked-in starter currently has:
 
 - Expo `~57.0.27`, React Native `0.86.3`, React `19.2.3`, and strict TypeScript.
 - Node.js `>=22.13.0` and npm with a committed `package-lock.json`.
-- `index.ts` registering `App.tsx`, which renders `src/screens/HomeScreen.tsx`.
+- `expo-router/entry` as the entry point; thin routes under `src/app/` render screens
+  from `src/screens/`.
 - Safe-area support and Metro web bundling.
-- EAS `preview` and `apk` profiles explicitly producing Android APKs, plus a
-  `production` profile for future store builds; no `development` profile yet.
-- Type checking, Expo dependency checks, and web export in CI; no lint setup yet.
+- EAS `development`, `preview`, and `apk` profiles, plus a `production` profile for
+  future store builds. `preview` and `apk` explicitly produce Android APKs.
+- Lint, type checking, Jest tests, Expo dependency checks, and web export in CI.
 - No `ios/` or `android/` directories; they are ignored in Git.
 
-Expo Router is the required navigation target, but it is not installed yet.
-The setup steps below describe how to evolve this starter. Do not claim that
-Router, development builds, linting, or offline inference already work before configuring
-and verifying them. Recheck the baseline whenever these files change.
+Expo Router, ESLint, Jest, and the development-client dependency are installed.
+The mobile screens call the SQLite repositories and the AI engine through the adapters in
+`src/services/backend/`. Tests, and runs with `EXPO_PUBLIC_SAKLAW_FIXTURES=1`, use the
+labeled in-memory fixtures in `src/services/fixtures/`. The current AI engine is the
+LM Studio HTTP adapter, a development stand-in for on-device inference.
+The setup steps below record how the starter was evolved. Do not claim that
+development builds or offline inference work before configuring and verifying
+them. Recheck the baseline whenever these files change.
 
 ## Verify Expo APIs against the installed SDK
 
