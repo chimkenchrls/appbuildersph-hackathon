@@ -296,6 +296,14 @@ export function ScopeDraftScreen({
       ? project.description
       : 'Project field';
 
+  // Only a draft made from a conversation has a source. The flag is stored when it is made.
+  const draftSourceLabel =
+    draft.sourceConversation && typeof draft.extractedWithAi === 'boolean'
+      ? draft.extractedWithAi
+        ? 'Drafted by AI · Review every field'
+        : 'Drafted by the rule-based fallback, not AI · Check every field'
+      : null;
+
   return (
     <View style={styles.container}>
       {/* Top Header matching exact mockup */}
@@ -319,6 +327,15 @@ export function ScopeDraftScreen({
           <Text style={styles.subhead}>
             A draft from your conversation.{'\n'}Check each detail before you confirm.
           </Text>
+          {draftSourceLabel ? (
+            <View
+              style={[styles.sourcePill, draft.extractedWithAi ? styles.sourcePillAi : styles.sourcePillFallback]}
+              accessibilityRole="text"
+              accessibilityLabel={draftSourceLabel}
+            >
+              <Text style={styles.sourcePillText}>{draftSourceLabel}</Text>
+            </View>
+          ) : null}
         </View>
 
         {/* View pasted conversation Card (Accordion) */}
@@ -985,6 +1002,27 @@ const styles = StyleSheet.create({
   },
   headerSection: {
     marginBottom: 20,
+  },
+  sourcePill: {
+    alignSelf: 'flex-start',
+    marginTop: 12,
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 999,
+    borderWidth: 1,
+  },
+  sourcePillAi: {
+    backgroundColor: colors.aiSurface,
+    borderColor: colors.aiBorder,
+  },
+  sourcePillFallback: {
+    backgroundColor: colors.warningSurface,
+    borderColor: colors.warningBorder,
+  },
+  sourcePillText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: colors.textPrimary,
   },
   eyebrow: {
     fontSize: 11,

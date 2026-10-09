@@ -39,8 +39,9 @@
     "extra": {
       "router": {},
       "eas": {
-        "projectId": "e9284596-ad69-4623-812b-67cf09bf51f7"
+        "projectId": "3a9872c8-9c3b-4ccf-885e-7f5116233f8c"
       }
-    }
+    },
+    "owner": "twilightdust"
   }
 }

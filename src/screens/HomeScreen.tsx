@@ -9,7 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { initializeBackendAsync, type AppServices } from '@/services/bootstrapService';
 import { KasunduanVaultService } from '@/services/kasunduanVaultService';
-import { ServiceError } from '@/services/errors';
+import { ServiceError, extractionFailure } from '@/services/errors';
 import { getDatabaseAsync } from '@/database/client';
 import { seedDemoDataAsync } from '@/database/seed';
 import { colors } from '@/constants/theme';
@@ -442,22 +442,20 @@ export function HomeScreen() {
       throw new Error(`A project named "${data.projectName}" already exists.`);
     }
 
-    // Fast brief extraction (local LLM or instant heuristic fallback)
+    // The service answers with the model, or with its labelled rule-based extractor when no
+    // engine is available. Any other failure (too long, timeout, unusable answer) is shown to
+    // the user; it is never turned into a draft that looks like a model result.
     let extractedDraft: ScopeDraft;
     try {
       extractedDraft = await services.services.briefCraft.extractBrief(
         data.conversation,
         data.projectName,
       );
-      extractedDraft.title = data.projectName;
-      extractedDraft.sourceConversation = data.conversation;
-    } catch {
-      extractedDraft = services.services.briefCraft.extractBriefHeuristic(
-        data.conversation,
-        data.projectName,
-      );
-      extractedDraft.sourceConversation = data.conversation;
+    } catch (reason) {
+      throw extractionFailure(reason);
     }
+    extractedDraft.title = data.projectName;
+    extractedDraft.sourceConversation = data.conversation;
 
     let targetProj: Project;
     if (currentDraftProjectId) {

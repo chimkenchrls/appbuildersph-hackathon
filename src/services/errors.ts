@@ -1,3 +1,5 @@
+import { LLMContextOverflowError, LLMGenerationTimeoutError, LLMParseError } from '@/llm/contracts';
+
 export type ServiceErrorCode = 'model_unavailable' | 'generation_timeout' | 'input_too_long' | 'invalid_output' | 'cancelled' | 'save_failed' | 'not_found' | 'invalid_input' | 'data_integrity' | 'conflict';
 
 export class ServiceError extends Error {
@@ -26,4 +28,16 @@ export function errorMessage(error: unknown): string {
 
 export function checkCancelled(signal: AbortSignal) {
   if (signal.aborted) throw new ServiceError('cancelled');
+}
+
+/**
+ * Turns a failed extraction into the message the user sees. A model failure is reported as
+ * itself: it is never replaced by a rule-based draft that looks like a model result.
+ */
+export function extractionFailure(reason: unknown): Error {
+  if (reason instanceof ServiceError) return new Error(errorMessage(reason));
+  if (reason instanceof LLMContextOverflowError) return new Error(errorMessage(new ServiceError('input_too_long')));
+  if (reason instanceof LLMGenerationTimeoutError) return new Error(errorMessage(new ServiceError('generation_timeout')));
+  if (reason instanceof LLMParseError) return new Error(errorMessage(new ServiceError('invalid_output')));
+  return reason instanceof Error ? reason : new Error('Something went wrong. Your edits are still here. Please try again.');
 }
