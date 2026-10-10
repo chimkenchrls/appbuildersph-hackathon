@@ -67,7 +67,7 @@ On the app's deep teal surfaces he needs a light backing shape, since his body i
 
 **Web landing page.** Behaviour comes from the page-mascot component.
 
-- **Directions:** his head turns to one of eight directions toward the cursor, and faces forward when the cursor is close. Touch devices show the forward frame.
+- **Directions:** his head turns to one of eight directions toward the cursor, and faces forward when the cursor is close. On touch screens he turns toward wherever the screen is touched, holds for about two seconds, then faces forward again.
 - **Reactions on click:** a blink, then heart, sparkle or delighted in turn. The reaction holds for about 1.4 seconds, and for as long as the cursor rests on him, then fades back to his normal face. Four quick clicks give dizzy, which lasts about 1.8 seconds.
 - **Dizzy from the cursor:** swinging the cursor around him by two full turns within three seconds, while it is within 360 pixels of him, also makes him dizzy. It cannot trigger again for about four seconds afterwards.
 - **No movement on click:** only his expression changes. The component's default squash was removed at the owner's request.

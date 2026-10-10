@@ -62,6 +62,8 @@ const SPIN_LIMIT = Math.PI * 4
 const SPIN_WINDOW = 3000
 const SPIN_RANGE = 360
 const SPIN_COOLDOWN = 4000
+// On touch screens he keeps looking at the last touch for this long, then faces forward.
+const TOUCH_HOLD = 2200
 
 // background-size 300% makes each cell a clean 0/50/100% step on both axes.
 function cell(index: number): CSSProperties {
@@ -124,11 +126,8 @@ export function Mascot(props: MascotProps) {
   }, [clearTimers, later, show])
 
   useEffect(() => {
-    if (!window.matchMedia('(hover: hover) and (pointer: fine)').matches) {
-      return
-    }
-
     let sector = -1
+    let lookAway: number | undefined
     let pointer: { x: number; y: number } | null = null
     let lastAngle: number | null = null
     let turns: { at: number; by: number }[] = []
@@ -186,17 +185,35 @@ export function Mascot(props: MascotProps) {
       setDirection(CLOCKWISE[sector])
     }
 
-    const onPointerMove = (event: PointerEvent) => {
+    // A finger is not a cursor: it lands, maybe drags, and lifts. He looks at where it touched,
+    // then faces forward again once nothing has touched the screen for a moment.
+    const faceForward = () => {
+      pointer = null
+      sector = -1
+      setDirection('center')
+    }
+
+    const onPointer = (event: PointerEvent) => {
       pointer = { x: event.clientX, y: event.clientY }
-      aim(true)
+      if (event.pointerType === 'mouse') {
+        // Only a mouse can circle him without touching, so only a mouse can make him dizzy this way.
+        aim(event.type === 'pointermove')
+        return
+      }
+      aim()
+      window.clearTimeout(lookAway)
+      lookAway = window.setTimeout(faceForward, TOUCH_HOLD)
     }
     const onScroll = () => aim()
 
-    window.addEventListener('pointermove', onPointerMove, { passive: true })
+    window.addEventListener('pointermove', onPointer, { passive: true })
+    window.addEventListener('pointerdown', onPointer, { passive: true })
     window.addEventListener('scroll', onScroll, { passive: true })
 
     return () => {
-      window.removeEventListener('pointermove', onPointerMove)
+      window.clearTimeout(lookAway)
+      window.removeEventListener('pointermove', onPointer)
+      window.removeEventListener('pointerdown', onPointer)
       window.removeEventListener('scroll', onScroll)
     }
   }, [dizzy])

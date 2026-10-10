@@ -167,7 +167,7 @@ export default function RootScreen() {
   return (
     <div ref={scroller} className="lp" data-scroller>
       <Head>
-        <title>OwlSet: clear agreements for freelancers</title>
+        <title>OwlSet</title>
         <meta name="description" content={DESCRIPTION} />
         <meta name="theme-color" content={colors.background} />
         <meta property="og:type" content="website" />
