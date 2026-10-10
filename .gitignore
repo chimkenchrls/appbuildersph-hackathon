@@ -30,3 +30,8 @@ local-ai/backend/__pycache__/
 # Python caches
 __pycache__/
 .superpowers/
+
+# Build and model binaries: share these by link or release, never in git
+*.apk
+*.aab
+*.gguf
