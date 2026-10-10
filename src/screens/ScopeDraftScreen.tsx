@@ -15,6 +15,7 @@ import { AppIcon } from '@/components/Icon';
 import { hapticSuccess, hapticImpactLight } from '@/utils/haptics';
 import { useExitGuard } from '@/hooks/useExitGuard';
 import { parseEstimate } from '@/safety/parseEstimate';
+import { findDuration } from '@/safety/conversationTerms';
 import { errorMessage } from '@/services/errors';
 import { newId } from '@/utils/ids';
 import type { Project, ScopeDraft, Requirement, TaxTreatment } from '@/types/domain';
@@ -197,17 +198,11 @@ export function ScopeDraftScreen({
   };
 
   const handleSaveTimeline = () => {
-    if (tempTimelineInput.trim()) {
-      const trimmed = tempTimelineInput.trim();
-      setTimelineNotes(trimmed);
-      const numMatch = trimmed.match(/(\d+)\s*days?/i);
-      const weekMatch = trimmed.match(/(\d+)\s*weeks?/i);
-      if (numMatch && numMatch[1]) {
-        setDurationDays(parseInt(numMatch[1], 10));
-      } else if (weekMatch && weekMatch[1]) {
-        setDurationDays(parseInt(weekMatch[1], 10) * 7);
-      }
-    }
+    const trimmed = tempTimelineInput.trim();
+    // The day count always follows the text. Text with no readable length ("end of November")
+    // keeps the wording and leaves the count unset; an empty field clears both.
+    setTimelineNotes(trimmed);
+    setDurationDays(trimmed ? (findDuration(trimmed)?.days ?? null) : null);
     setTermModalVisible(null);
   };
 
@@ -217,9 +212,8 @@ export function ScopeDraftScreen({
   };
 
   const handleSaveRevisions = () => {
-    if (tempRevisionsInput.trim()) {
-      setRevisionTerms(tempRevisionsInput.trim());
-    }
+    // An empty field clears the terms: unset is a valid answer.
+    setRevisionTerms(tempRevisionsInput.trim());
     setTermModalVisible(null);
   };
 
@@ -264,7 +258,7 @@ export function ScopeDraftScreen({
       exclusions: draft.exclusions || [],
       missingInformation: [
         ...(budgetAmount == null ? ['Agreed budget is not specified.'] : []),
-        ...(!deadline && !durationDays ? ['Delivery deadline or timeline is not specified.'] : []),
+        ...(!deadline && !durationDays && !timelineNotes.trim() ? ['Delivery deadline or timeline is not specified.'] : []),
         ...(!revisionTerms ? ['Revision allowance is not specified.'] : []),
       ],
       taxTreatment,
@@ -284,6 +278,10 @@ export function ScopeDraftScreen({
   // Confirm Scope handler
   const handleConfirm = async () => {
     if (saving || budgetInvalid) return;
+    if (!requirements.some((item) => item.category === 'deliverable')) {
+      setFeedback('Add at least one deliverable before confirming the scope.');
+      return;
+    }
     setSaving(true); setFeedback(null);
 
     try { await onConfirmScope(currentDraft); await hapticSuccess(); }

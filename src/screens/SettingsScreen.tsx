@@ -15,6 +15,7 @@ import { colors, radii, spacing, shadows } from '@/constants/theme';
 import { AppIcon } from '@/components/Icon';
 import { hapticSuccess } from '@/utils/haptics';
 import type { AppServices } from '@/services/bootstrapService';
+import { USER_CONFIGURED_KEY } from '@/database/settingKeys';
 import type { NativeModelInfo, OnDeviceInferenceResult } from '@/llm/adapters/nativeLlamaAdapter';
 import type { LlmEngineMode } from '@/llm/adapters/hybridLlmAdapter';
 
@@ -191,9 +192,11 @@ export function SettingsScreen({ services, onDataReset, onProfileUpdated }: Sett
     try {
       if (llmUrl.trim()) {
         await services.repositories.settings.set('lm_studio_url', llmUrl.trim());
+        await services.repositories.settings.set(USER_CONFIGURED_KEY, '1');
       }
       if (llmModel.trim()) {
         await services.repositories.settings.set('lm_studio_model', llmModel.trim());
+        await services.repositories.settings.set(USER_CONFIGURED_KEY, '1');
       }
       const status = await services.llmEngine.checkConnection();
       if (status.available) {
@@ -226,6 +229,7 @@ export function SettingsScreen({ services, onDataReset, onProfileUpdated }: Sett
     try {
       await services.repositories.settings.set('lm_studio_url', llmUrl.trim());
       await services.repositories.settings.set('lm_studio_model', llmModel.trim());
+      await services.repositories.settings.set(USER_CONFIGURED_KEY, '1');
       setFeedbackMessage('Local LLM configuration saved.');
     } catch (err) {
       setFeedbackMessage('Failed to save settings: ' + (err as Error).message);

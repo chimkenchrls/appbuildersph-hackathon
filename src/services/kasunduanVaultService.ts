@@ -5,6 +5,11 @@ import { ServiceError } from './errors';
 import { finiteEstimate, wholeWorkingDays, limits, textValue } from '@/safety/validation';
 import { conflictingExclusions } from '@/safety/scopeExclusions';
 
+/** Adds two money amounts in cents, so 100.10 + 200.20 is 300.30 and not 300.29999999999995. */
+function addMoney(left: number, right: number): number {
+  return Math.round((Math.round(left * 100) + Math.round(right * 100))) / 100;
+}
+
 export class KasunduanVaultService {
   constructor(private readonly agreementRepo: AgreementRepository) {}
 
@@ -95,7 +100,7 @@ export class KasunduanVaultService {
     const conflicts = conflictingExclusions({ requirements: updatedRequirements, exclusions: currentAgreement.exclusions });
     // An agreed addition does not establish an unspecified base total.
     const updatedBudget = currentAgreement.budgetAmount === null
-      ? null : currentAgreement.budgetAmount + (additionalFee ?? 0);
+      ? null : addMoney(currentAgreement.budgetAmount, additionalFee ?? 0);
     const updatedDays = currentAgreement.durationDays === null
       ? null : currentAgreement.durationDays + (additionalDays ?? 0);
     const budgetNotes = updatedBudget === null && additionalFee != null

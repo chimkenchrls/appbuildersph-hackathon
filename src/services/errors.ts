@@ -26,6 +26,17 @@ export function errorMessage(error: unknown): string {
   return messages[error.code];
 }
 
+/**
+ * The message to show for a failed action. A ServiceError has its own wording; any other Error
+ * from this app's handlers already carries a message written for the user. Anything else gets
+ * the generic text.
+ */
+export function userMessage(error: unknown): string {
+  if (error instanceof ServiceError) return errorMessage(error);
+  if (error instanceof Error && error.message.trim()) return error.message;
+  return errorMessage(error);
+}
+
 export function checkCancelled(signal: AbortSignal) {
   if (signal.aborted) throw new ServiceError('cancelled');
 }

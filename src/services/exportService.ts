@@ -77,10 +77,13 @@ export class ExportService {
       const repos = repositories(tx, true);
       const project = await repos.project.getById(projectId);
       if (!project) throw new ServiceError('not_found');
-      const saved = await repos.settings.get(draftKey(projectId));
+      const agreements = await repos.agreement.listByProjectId(projectId);
+      // Once a scope is confirmed its working draft is superseded by the agreement, so an older
+      // draft setting left behind by a previous version is not part of the backup.
+      const saved = agreements.length ? null : await repos.settings.get(draftKey(projectId));
       const data = BackupSchema.parse({
         formatVersion: 1, project, draft: saved ? parseStoredDraft(saved, projectId) : null,
-        agreements: await repos.agreement.listByProjectId(projectId),
+        agreements,
         requests: await repos.scopeGuard.listRequestsByProjectId(projectId),
         analyses: await repos.scopeGuard.listAnalysesByProjectId(projectId),
         proposals: await repos.proposal.listByProjectId(projectId), exportedAt: new Date().toISOString(),

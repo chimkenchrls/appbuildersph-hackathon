@@ -52,7 +52,7 @@ export const ProposalSchema = z.object({
   id, projectId: id, analysisId: id, selectedItems: strings.min(1), freelancerFeeEstimate: amount,
   // Read old records without rounding them. New writes/imports impose whole days.
   freelancerDaysEstimate: amount, currency, draftMessage: text(limits.message),
-  status: z.enum(['draft', 'copied', 'sent', 'accepted']), createdAt: date, updatedAt: date,
+  status: z.enum(['draft', 'copied', 'sent']), createdAt: date, updatedAt: date,
 }).strict();
 
 export function stored<T>(schema: z.ZodType<T>, value: unknown): T {

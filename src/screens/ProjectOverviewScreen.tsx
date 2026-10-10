@@ -18,7 +18,8 @@ import { AppIcon } from '@/components/Icon';
 import { ShareService } from '@/services/shareService';
 import { hapticSuccess, hapticImpactLight } from '@/utils/haptics';
 import { conflictingExclusions } from '@/safety/scopeExclusions';
-import { errorMessage } from '@/services/errors';
+import { errorMessage, userMessage } from '@/services/errors';
+import { parseEstimate, parseWorkingDays } from '@/safety/parseEstimate';
 import type {
   Project,
   Agreement,
@@ -247,9 +248,11 @@ export function ProjectOverviewScreen({
   const [targetRequest, setTargetRequest] = useState<ClientRequest | null>(null);
   const [selectedAdditions, setSelectedAdditions] = useState<string[]>([]);
   const [customAdditionText, setCustomAdditionText] = useState('');
-  const [extraFee, setExtraFee] = useState('7000');
-  const [extraDays, setExtraDays] = useState('5');
-  const [recordClientApprovalCheckbox, setRecordClientApprovalCheckbox] = useState(true);
+  // Estimates are the freelancer's own numbers: they start empty, or from a proposal they saved.
+  const [extraFee, setExtraFee] = useState('');
+  const [extraDays, setExtraDays] = useState('');
+  const [acceptError, setAcceptError] = useState<string | null>(null);
+  const [recordClientApprovalCheckbox, setRecordClientApprovalCheckbox] = useState(false);
   const [signatoryName, setSignatoryName] = useState('');
   const [approvalNotes, setApprovalNotes] = useState('');
   const [isSubmittingAccept, setIsSubmittingAccept] = useState(false);
@@ -295,17 +298,21 @@ export function ProjectOverviewScreen({
           .map((f) => f.item)
       : [];
 
+    const request = req.rawText.replace(/\s+/g, ' ').trim();
     setSelectedAdditions(
       detectedAdditions.length > 0
         ? detectedAdditions
-        : [req.rawText.slice(0, 35) + '...'],
+        : [request.length > 80 ? `${request.slice(0, 79).trimEnd()}…` : request],
     );
     setCustomAdditionText('');
-    setExtraFee('7000');
-    setExtraDays('5');
-    setRecordClientApprovalCheckbox(true);
-    setSignatoryName(currentProject.clientName || 'Client');
-    setApprovalNotes('Agreed offline via direct conversation');
+    const saved = reqAnalysis ? proposals?.[reqAnalysis.id] : undefined;
+    setExtraFee(saved?.freelancerFeeEstimate != null ? String(saved.freelancerFeeEstimate) : '');
+    setExtraDays(saved?.freelancerDaysEstimate != null ? String(saved.freelancerDaysEstimate) : '');
+    setAcceptError(null);
+    // Client approval is a separate fact. It is recorded only when the freelancer says so.
+    setRecordClientApprovalCheckbox(false);
+    setSignatoryName(currentProject.clientName || '');
+    setApprovalNotes('');
     setAcceptModalOpen(true);
   };
 
@@ -340,15 +347,25 @@ export function ProjectOverviewScreen({
       return;
     }
 
+    // A fee or day count that cannot be read exactly is refused, never guessed at.
+    let feeNum: number | null;
+    let daysNum: number | null;
+    try {
+      feeNum = parseEstimate(extraFee);
+    } catch {
+      setAcceptError('Enter the fee as a number, for example 7000 or 7000.50, with no commas or symbols. Leave it blank if it is not decided.');
+      return;
+    }
+    try {
+      daysNum = parseWorkingDays(extraDays);
+    } catch {
+      setAcceptError('Enter the extra working days as a whole number, for example 5. Leave it blank if it is not decided.');
+      return;
+    }
+
+    setAcceptError(null);
     setIsSubmittingAccept(true);
     try {
-      const feeNum = extraFee.trim()
-        ? parseInt(extraFee.replace(/[^0-9]/g, ''), 10)
-        : null;
-      const daysNum = extraDays.trim()
-        ? parseInt(extraDays.replace(/[^0-9]/g, ''), 10)
-        : null;
-
       await onAcceptRequest(
         targetRequest,
         items,
@@ -365,8 +382,8 @@ export function ProjectOverviewScreen({
       await hapticSuccess();
       setAcceptModalOpen(false);
       setTargetRequest(null);
-    } catch {
-      Alert.alert('Error', 'Unable to accept request.');
+    } catch (reason) {
+      setAcceptError(userMessage(reason));
     } finally {
       setIsSubmittingAccept(false);
     }
@@ -1480,6 +1497,9 @@ export function ProjectOverviewScreen({
                     />
                   </View>
                 </View>
+                {acceptError ? (
+                  <Text style={styles.itemDescription} accessibilityRole="alert">{acceptError}</Text>
+                ) : null}
               </View>
 
               {/* Optional Client Approval / Signature */}
@@ -1540,7 +1560,7 @@ export function ProjectOverviewScreen({
               <View style={styles.modalLegalNotice}>
                 <AppIcon name="shield" size={14} color="#1E40AF" />
                 <Text style={styles.modalLegalNoticeText}>
-                  Creates Agreement v{((activeAgreement?.versionNumber || 1) + 1)} in your local SQLite vault enforceable under Philippine commercial law.
+                  Saves Agreement v{((activeAgreement?.versionNumber || 1) + 1)} on this device. Earlier versions stay unchanged.
                 </Text>
               </View>
 
@@ -1697,10 +1717,13 @@ const styles = StyleSheet.create({
   },
   cardHeaderLeft: {
     flex: 1,
+    minWidth: 0,
     marginRight: spacing.md,
   },
   cardHeaderRight: {
     alignItems: 'flex-end',
+    flexShrink: 1,
+    maxWidth: '45%',
   },
   projectTitle: {
     fontSize: 16,

@@ -58,6 +58,7 @@ function backend(currentAgreement = initial) {
       }),
       createAnalysis: jest.fn(async (analysis: ScopeGuardAnalysis) => { analyses.push(analysis); return analysis; }),
       getAnalysisById: jest.fn(async (id: string) => analyses.find(a => a.id === id) ?? null),
+      getAnalysisByRequestId: jest.fn(async (requestId: string) => analyses.find(a => a.requestId === requestId) ?? null),
       getRequestById: jest.fn(async (id: string) => requests.find(r => r.id === id) ?? null),
       updateRequestStatus: jest.fn(async (id: string, status: 'accepted', acceptedAt: string) => {
         requests = requests.map(r => r.id === id ? { ...r, status, acceptedAt } : r);

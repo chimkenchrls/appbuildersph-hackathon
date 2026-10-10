@@ -17,6 +17,7 @@ import { colors, radii, spacing, shadows } from '@/constants/theme';
 import { AppIcon } from '@/components/Icon';
 import { hapticImpactLight, hapticSuccess } from '@/utils/haptics';
 import type { Project, Agreement } from '@/types/domain';
+import { limits } from '@/safety/validation';
 
 interface AttachedItem {
   id: string;
@@ -202,10 +203,27 @@ export function NewRequestScreen({
 
   const hasContent = requestText.trim().length > 0 || attachedFiles.length > 0;
 
+  /** Only text can be read. Returns what is wrong with the request, or null when it is usable. */
+  const requestProblem = (text: string): string | null => {
+    if (text.length > limits.request) {
+      return `This request is too long (${text.length.toLocaleString('en-US')} characters). The limit is ${limits.request.toLocaleString('en-US')}. Paste only the relevant message.`;
+    }
+    if (!text.replace(/\[Attached [^\]]*\]/gi, '').trim()) {
+      return 'Attached files cannot be read yet. Paste the text of the request or type it in.';
+    }
+    return null;
+  };
+
   const handleSavePress = async () => {
     const textToSave = getPreparedRequestText();
     if (!textToSave) {
       setErrorMessage('Please enter a request, paste from clipboard, or attach files.');
+      await hapticImpactLight();
+      return;
+    }
+    const saveProblem = requestProblem(textToSave);
+    if (saveProblem) {
+      setErrorMessage(saveProblem);
       await hapticImpactLight();
       return;
     }
@@ -227,6 +245,12 @@ export function NewRequestScreen({
     const textToAnalyze = getPreparedRequestText();
     if (!textToAnalyze) {
       setErrorMessage('Please enter a request, paste from clipboard, or attach files.');
+      await hapticImpactLight();
+      return;
+    }
+    const analyzeProblem = requestProblem(textToAnalyze);
+    if (analyzeProblem) {
+      setErrorMessage(analyzeProblem);
       await hapticImpactLight();
       return;
     }

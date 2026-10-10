@@ -3,6 +3,7 @@ import { transaction } from '@/database/transaction';
 import { getDatabaseAsync } from '@/database/client';
 import { migrateAsync } from '@/database/migrate';
 import { seedDemoDataAsync } from '@/database/seed';
+import { USER_CONFIGURED_KEY } from '@/database/settingKeys';
 import { LMStudioAdapter } from '@/llm/adapters/lmStudioAdapter';
 import { NativeLlamaAdapter } from '@/llm/adapters/nativeLlamaAdapter';
 import { HybridLlmAdapter } from '@/llm/adapters/hybridLlmAdapter';
@@ -45,14 +46,18 @@ async function initialize(): Promise<AppServices> {
   const repos = repositories(db);
   const { agreement: agreementRepo, scopeGuard: scopeGuardRepo, proposal: proposalRepo, settings: settingsRepo } = repos;
 
-  // Explicit development configuration wins over defaults saved on first launch.
-  // Keep saved settings as a fallback without rewriting existing projects or settings.
+  // Precedence: an address the user saved in Settings, then the build's configuration, then the
+  // default saved on first launch. Saved settings are never rewritten here.
   const networkEngine = new LMStudioAdapter({
     getBaseUrl: async () => {
-      return process.env.EXPO_PUBLIC_LM_STUDIO_URL || await settingsRepo.get('lm_studio_url') || 'http://10.0.2.2:1234/v1';
+      const saved = await settingsRepo.get('lm_studio_url');
+      if (saved && await settingsRepo.get(USER_CONFIGURED_KEY)) return saved;
+      return process.env.EXPO_PUBLIC_LM_STUDIO_URL || saved || 'http://10.0.2.2:1234/v1';
     },
     getModel: async () => {
-      return process.env.EXPO_PUBLIC_LM_STUDIO_MODEL || await settingsRepo.get('lm_studio_model') || 'local-model';
+      const saved = await settingsRepo.get('lm_studio_model');
+      if (saved && await settingsRepo.get(USER_CONFIGURED_KEY)) return saved;
+      return process.env.EXPO_PUBLIC_LM_STUDIO_MODEL || saved || 'local-model';
     },
   });
 

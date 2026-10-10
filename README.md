@@ -6,6 +6,47 @@ OwlSet is an offline-first mobile workspace for freelance developers and designe
 
 ---
 
+## Using the Android app: first-time setup
+
+OwlSet runs its AI on the phone, and the model file is **not** inside the APK. Do this once
+after installing. It takes about five minutes and needs no internet.
+
+**You need**
+* An Android phone with about 8 GB RAM and free storage of roughly **twice the model file's
+  size** (the picker makes a temporary copy while importing).
+* The model file: `Qwen2.5-3B-Instruct` in GGUF format, `Q4_K_M` quantization (about 2 GB). Any
+  `.gguf` chat model works, but this is the one OwlSet was tested with.
+* The file must be saved **on the phone** (Downloads is fine). A file that only exists in a cloud
+  drive will not import.
+
+**Steps**
+1. Install the APK and open OwlSet. Finish the short welcome screen (your name and role).
+2. Open **Settings**. Under **AI Inference Engine**, choose the **On-Device** tab.
+3. Tap **Import .gguf Model** and pick the file. Keep the app open until it says the model was
+   imported and activated. The file name and size are then shown.
+4. Tap **Test On-Device**. A passing test shows the time it took. The first run is the slowest.
+5. Go back to **Projects** and tap **New Project**. Paste a client conversation and create the
+   draft. The draft screen should say **"Drafted by AI"**.
+
+**What to expect**
+* Each AI step takes roughly 10 to 20 seconds on a recent phone. "Analyze request and prepare
+  proposal" makes two model calls, so it can take about twice that.
+* Once imported, the model stays on the phone across restarts and works in airplane mode.
+* Conversations over about 15,000 characters, or very long requests, are refused with a message.
+  Paste only the relevant messages.
+* Without a model the app still opens and runs. Project drafts then use a simple rule-based
+  reader and are labelled **"Drafted by the rule-based fallback, not AI"**. Scope checks and
+  change proposals need the model and will show an error until one is imported.
+
+**If something goes wrong**
+* *"Not a GGUF model" on import:* the file is not a GGUF, or it was only partly downloaded.
+  Download it again.
+* *"Not enough free storage":* free up space and try again. Your previous model is kept.
+* *The app is slow or closes:* open Settings, tap **Free Model RAM**, and close other apps. A
+  smaller model (for example a 1.5B) uses less memory.
+
+---
+
 ## Core capabilities
 
 * **BriefCraft:** Extracts deliverables, budget, timeline, revision allowances, exclusions, and BIR withholding tax treatment from raw client chat messages or notes.
@@ -29,7 +70,7 @@ OwlSet is an offline-first mobile workspace for freelance developers and designe
 * **Navigation:** Expo Router (`src/app/`).
 * **Local Database:** `expo-sqlite` with write-ahead logging (WAL mode) and sequential versioned migrations (`src/database/migrations/`).
 * **Validation:** Zod schema validation for all domain records and LLM outputs (`src/types/schemas.ts`).
-* **Inference Engine:** LM Studio HTTP adapter (`LMStudioAdapter`) for development testing. Physical devices use the computer's LAN address. Embedded on-device inference remains an integration task.
+* **Inference Engine:** on-device `llama.rn` with a user-imported GGUF model (`NativeLlamaAdapter`), or an LM Studio HTTP server on the local network (`LMStudioAdapter`) for development. `HybridLlmAdapter` chooses between them (On-Device, Auto or Network in Settings).
 
 ---
 
@@ -70,8 +111,8 @@ On a physical iPhone or Android phone, enable LM Studio's local-network server
 binding and use the computer's LAN IP, not the phone's localhost. Keep fixtures
 disabled for real inference.
 
-Explicit environment values override LM Studio settings previously saved in
-SQLite; saved settings remain the fallback when those values are absent. Restart
+Precedence for the server address: a value the user saved in Settings wins, then the
+build's `EXPO_PUBLIC_*` value, then the default saved on first launch. Restart
 Metro with `npx expo start --clear` and reload the app after changing `.env`.
 Existing project data does not need to be deleted. The Ready state checks that
 the configured model is listed by the server; it does not guarantee generation
