@@ -1,3 +1,5 @@
+import { limits, textValue } from '@/safety/validation';
+import { ServiceError } from './errors';
 import type { LLMEngine } from '@/llm/contracts';
 import { parseAndValidateJson } from '@/llm/jsonParser';
 import { buildScopeGuardPrompt } from '@/llm/prompts/scopeGuardPrompt';
@@ -13,6 +15,21 @@ export class ScopeGuardService {
     private readonly agreementRepo: AgreementRepository,
     private readonly scopeGuardRepo: ScopeGuardRepository,
   ) {}
+
+  /** Store a client message without requiring inference or creating a proposal. */
+  async saveRequest(options: { projectId: string; agreementId: string; requestText: string }): Promise<ClientRequest> {
+    const rawText = textValue(options.requestText, limits.request);
+    const agreement = await this.agreementRepo.getById(options.agreementId);
+    if (!agreement || agreement.projectId !== options.projectId) throw new ServiceError('not_found');
+    return this.scopeGuardRepo.createRequest({
+      id: `req_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+      projectId: options.projectId,
+      agreementId: agreement.id,
+      rawText,
+      createdAt: new Date().toISOString(),
+      status: 'stored',
+    });
+  }
 
   async analyzeRequest(options: {
     projectId: string;

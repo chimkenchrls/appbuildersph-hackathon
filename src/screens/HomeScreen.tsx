@@ -9,7 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { initializeBackendAsync, type AppServices } from '@/services/bootstrapService';
 import { KasunduanVaultService } from '@/services/kasunduanVaultService';
-import { ServiceError, extractionFailure } from '@/services/errors';
+import { ServiceError, errorMessage, extractionFailure } from '@/services/errors';
 import { getDatabaseAsync } from '@/database/client';
 import { seedDemoDataAsync } from '@/database/seed';
 import { colors } from '@/constants/theme';
@@ -599,38 +599,25 @@ export function HomeScreen() {
   };
 
   const handleSaveRequest = async (requestText: string) => {
-    if (!services || !activeProject) return;
+    if (!services || !activeProject) throw new Error(errorMessage(new ServiceError('not_found')));
+    const targetAgreement = activeAgreement || activeAgreements[0];
+    if (!targetAgreement) throw new Error('Confirm your project scope before saving a request.');
 
+    let savedRequest: ClientRequest;
     try {
-      const targetAgreement = activeAgreement || activeAgreements[0];
-      if (!targetAgreement) return;
-
-      const newAnalysis = await services.services.scopeGuard.analyzeRequest({
+      savedRequest = await services.services.scopeGuard.saveRequest({
         projectId: activeProject.id,
         agreementId: targetAgreement.id,
         requestText,
       });
-      setAnalysis(newAnalysis);
-
-      const potentialItems = newAnalysis.findings
-        .filter((f) => f.classification === 'potential_additional')
-        .map((f) => f.item);
-
-      const newProposal = await services.services.changeDesk.draftProposal({
-        projectId: activeProject.id,
-        analysisId: newAnalysis.id,
-        selectedItems: potentialItems,
-        freelancerFeeEstimate: 0,
-        freelancerDaysEstimate: 0,
-        currency: targetAgreement.budgetCurrency || 'PHP',
-      });
-      setProposal(newProposal);
-
-      await refreshProjectRequests(activeProject.id);
-      navigateToSubScreen('overview', 'backward');
-    } catch {
-      navigateToSubScreen('overview', 'backward');
+    } catch (reason) {
+      throw new Error(errorMessage(reason instanceof ServiceError ? reason : new ServiceError('save_failed')));
     }
+    setProjectRequests(prev => ({
+      ...prev,
+      [activeProject.id]: [savedRequest, ...(prev[activeProject.id] || [])],
+    }));
+    navigateToSubScreen('overview', 'backward');
   };
 
   const handleAcceptRequest = async (

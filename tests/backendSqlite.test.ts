@@ -696,6 +696,22 @@ const reviewedDraft = (projectId: string) => ({
     expect(await (ports.agreements as AgreementRepository).listByProjectId(agreement!.projectId)).toHaveLength(1);
   });
 
+  test('plain requests persist in SQLite without inference or analysis records', async () => {
+    const generate = jest.fn(async () => { throw new Error('AI unavailable'); });
+    const { db, ports } = await realBackend({ isAvailable: async () => false, generate });
+    try {
+      const service = new ScopeGuardService(ports.engine, ports.agreements as AgreementRepository, ports.scopeGuard as ScopeGuardRepository);
+      const saved = await service.saveRequest({ projectId: 'proj_demo_website_01', agreementId: 'agmt_demo_v1_01', requestText: '  Add a gallery  ' });
+      const reopenedRepository = new ScopeGuardRepository(db);
+      expect(await reopenedRepository.getRequestById(saved.id)).toEqual({ ...saved, acceptedAt: null });
+      expect(await reopenedRepository.listRequestsByProjectId(saved.projectId)).toContainEqual({ ...saved, acceptedAt: null });
+      expect(await reopenedRepository.getAnalysisByRequestId(saved.id)).toBeNull();
+      expect(generate).not.toHaveBeenCalled();
+      await expect(service.saveRequest({ projectId: 'other-project', agreementId: saved.agreementId, requestText: 'Add booking' })).rejects.toMatchObject({ code: 'not_found' });
+      await expect(service.saveRequest({ projectId: saved.projectId, agreementId: saved.agreementId, requestText: '   ' })).rejects.toMatchObject({ code: 'invalid_input' });
+    } finally { await db.closeAsync(); }
+  });
+
   test('legacy analysis service rolls back its request when analysis persistence fails', async () => {
     const { db, ports } = await realBackend(engine(JSON.stringify({ overall_classification: 'potential_additional', summary: 'Extra',
       findings: [{ item: 'Booking', classification: 'potential_additional', explanation: 'Extra', evidence_requirement_ids: [] }], clarification_questions: [] })));
