@@ -27,7 +27,6 @@ The checked-in starter currently has:
 - `expo-router/entry` as the entry point; thin routes under `src/app/` render screens
   from `src/screens/`.
 - Safe-area support and Metro web bundling. The native workspace uses the staging light UI; the web landing retains its dark palette.
-- Staging screen integration and migration-3 compatibility are recorded in `docs/decisions/2026-10-10-staging-integration.md`.
 - EAS `development`, `preview`, and `apk` profiles, plus a `production` profile for
   future store builds. `preview` and `apk` explicitly produce Android APKs.
 - Lint, type checking, Jest tests, Expo dependency checks, and web export in CI.

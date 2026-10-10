@@ -102,8 +102,7 @@ Rebuild the atlases from the project root with the skill's
 two sheets and writes `public/mascots/kwagi-{directions,reactions}.webp`.
 Then run `python3 scripts/align_kwagi_reactions.py` (Pillow and NumPy). It moves and scales the
 reaction frames to match the forward-facing frame, so Kwagi stays in place when clicked.
-`scripts/generate_mascot_gemini.py` can regenerate sheets with a `GEMINI_API_KEY`; generated
-sheets need checking by eye, because the build's checks do not catch wrong expressions or
+Generated sheets need checking by eye, because the build's checks do not catch wrong expressions or
 turned heads.
 
 Directions are from the **viewer's** perspective, in this order:
@@ -151,11 +150,9 @@ There is no head-only variant yet. The app icon will need one.
 | `src/screens/workspace/HomeScreen.tsx` | Native home screen showing the app Kwagi. |
 | `src/screens/RootScreen.web.tsx` | Web landing screen showing the cursor-following Kwagi. `EXPO_PUBLIC_KWAGI_WEB_PREVIEW=1` also shows the app Kwagi there for testing; this switch is temporary. |
 | `scripts/build_kwagi_app.py` | Source of the app drawing. |
-| `scripts/generate_mascot_gemini.py` | Optional Gemini generation of sprite sheets. |
 | `assets/mascot/kwagi-full.svg` | Static picture of the app drawing. |
 | `public/mascots/kwagi-{directions,reactions}.webp` | Web atlases, 1080×1080 with 360×360 cells. |
 | `characters/kwagi/{directions,reactions}.png` | Source sheets for the atlases. |
-| `characters/kwagi/PROMPT-*.txt` | Prompts used for sheet generation. |
 | `assets/mascot/reference/kwagi-fullbody-reference.png` | Owner's full-body design; the app drawing follows it. |
 | `assets/mascot/reference/kwagi-redesign-generated.png` | Owner's direction sheet; the web atlases come from it. |
 | `assets/mascot/reference/kwagi-directions-original.webp` | Earliest direction sheet, kept for history only. Do not ship it. |

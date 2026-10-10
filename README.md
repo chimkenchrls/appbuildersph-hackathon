@@ -294,7 +294,7 @@ src/
   constants/ types/ utils/
 tests/                 Jest suites (unit, SQLite integration, screens)
 demo/                  The promotional video, a separate Remotion project (see demo/README.md)
-docs/                  Deployment, decisions, verification checklists, specs and plans
+docs/                  Deployment guide
 ```
 
 Further reading: [PROJECT.md](PROJECT.md) (product), [ARCHITECTURE.md](ARCHITECTURE.md),
@@ -314,6 +314,4 @@ npx eas-cli@latest build --platform android --profile preview   # test build
 npx eas-cli@latest build --platform android --profile apk       # release candidate
 ```
 
-Both produce a standalone `.apk`. New native dependencies require a new build. Persistence and
-integration decisions are recorded in [docs/decisions](docs/decisions) and
-[docs/superpowers](docs/superpowers).
+Both produce a standalone `.apk`. New native dependencies require a new build.

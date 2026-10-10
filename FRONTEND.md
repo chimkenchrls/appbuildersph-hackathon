@@ -194,9 +194,7 @@ current task. Keep marketing headlines on the landing page.
 Use React Native primitives and `StyleSheet`. Define shared semantic tokens in
 `src/constants/theme.ts` and consume them from reusable UI components. The
 values below are the Mint Teal tokens in that file. They replaced the earlier, greyer Mint Slate values on 2026-10-10 at the owner's request. They were first sampled from the
-reviewed theme preview and are approximate; the design spec
-(`docs/superpowers/specs/2026-10-09-saklaw-mobile-frontend-design.md`, section 6)
-records the contrast ratio of each pair:
+reviewed theme preview and are approximate:
 
 | Token                            | Value                 | Purpose                                                                                 |
 | -------------------------------- | --------------------- | --------------------------------------------------------------------------------------- |
