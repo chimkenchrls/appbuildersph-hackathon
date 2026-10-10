@@ -17,6 +17,6 @@
     "ios",
     ".agents/skills",
     ".claude/skills",
-    "agent/skills"
+    "demo"
   ]
 }

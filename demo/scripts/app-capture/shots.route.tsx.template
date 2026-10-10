@@ -1,0 +1,73 @@
+// TEMPORARY capture harness for the demo video. Not part of the app; removed after use.
+import { useLocalSearchParams } from 'expo-router';
+import { View } from 'react-native';
+import { BottomNavBar } from '@/components/BottomNavBar';
+import { NewProjectScreen } from '@/screens/NewProjectScreen';
+import { NewRequestScreen } from '@/screens/NewRequestScreen';
+import { ProjectOverviewScreen } from '@/screens/ProjectOverviewScreen';
+import { ProjectsScreen } from '@/screens/ProjectsScreen';
+import { ProposalEditorScreen } from '@/screens/ProposalEditorScreen';
+import { ScopeDraftScreen } from '@/screens/ScopeDraftScreen';
+import { ScopeReviewScreen } from '@/screens/ScopeReviewScreen';
+import type { Agreement, ChangeProposal, Project, ScopeDraft, ScopeGuardAnalysis } from '@/types/domain';
+
+const now = '2026-10-10T02:00:00.000Z';
+const conversation =
+  'Client: 5 pages, right? Home, Menu, About, Gallery, Contact\nClient: and a contact form so people can message us\nMe: PHP 15,000 ok?\nClient: ok. two weeks?\nMe: Yes, with two rounds of revisions.';
+const requirements = [
+  { id: 'REQ-01', title: 'Five responsive pages', description: 'Home, Menu, About, Gallery and Contact.', category: 'deliverable' as const },
+  { id: 'REQ-02', title: 'Contact form', description: 'On the Contact page, so people can message the café.', category: 'deliverable' as const },
+  { id: 'REQ-03', title: 'Revision allowances', description: 'Two rounds of revisions.', category: 'term' as const },
+];
+const cafe: Project = { id: 'p1', title: 'Café Amihan website', clientName: 'Café Amihan', description: 'Website', createdAt: now, updatedAt: now };
+const harbor: Project = { id: 'p2', title: 'Harbor Studio rebrand', clientName: 'Harbor Studio', description: 'Branding', createdAt: now, updatedAt: now };
+const lakbay: Project = { id: 'p3', title: 'Lakbay travel blog', clientName: 'Lakbay', description: 'Blog', createdAt: now, updatedAt: now };
+const draft: ScopeDraft = {
+  title: 'Café Amihan website', requirements, budgetAmount: 15000, budgetCurrency: 'PHP', budgetNotes: null, durationDays: 14, deadline: null,
+  timelineNotes: 'Two weeks', revisionTerms: 'Two rounds of revisions', exclusions: [], missingInformation: ['Hosting is not specified.'],
+  taxTreatment: 'none_specified', sourceConversation: conversation, extractedWithAi: true,
+};
+const agreement: Agreement = { ...draft, id: 'a1', projectId: 'p1', versionNumber: 1, confirmedAt: now };
+const agreementOf = (project: Project, versionNumber: number): Agreement => ({ ...agreement, id: `a-${project.id}`, projectId: project.id, title: project.title, versionNumber });
+const request = 'Can we add one more thing? Customer accounts, so regulars can log in.';
+const analysis: ScopeGuardAnalysis = {
+  id: 'an1', requestId: 'r1', agreementId: 'a1', classification: 'potential_additional',
+  summary: 'Customer accounts are not in the recorded scope.',
+  findings: [
+    { item: 'Customer accounts with login', classification: 'potential_additional', explanation: 'Not found in the recorded scope. REQ-01 and REQ-02 cover pages and a contact form.', evidenceRequirementIds: ['REQ-01', 'REQ-02'] },
+  ],
+  clarificationQuestions: [], createdAt: now,
+};
+const proposal: ChangeProposal = {
+  id: 'pr1', projectId: 'p1', analysisId: 'an1', selectedItems: ['Customer accounts with login'], freelancerFeeEstimate: 7000, freelancerDaysEstimate: 5, currency: 'PHP',
+  draftMessage: 'Hi! Customer accounts are not part of what we recorded for the site, so I would treat them as additional work: PHP 7,000 and 5 more days. Happy to adjust.',
+  status: 'draft', createdAt: now, updatedAt: now,
+};
+const nothing = () => {};
+const later = async () => {};
+
+export default function Shots() {
+  const { s } = useLocalSearchParams<{ s?: string }>();
+  let screen = null;
+  if (s === 'projects')
+    screen = (
+      <>
+        <View style={{ flex: 1 }}>
+          <ProjectsScreen projects={[cafe, harbor, lakbay]} projectAgreements={{ p1: [agreement], p2: [agreementOf(harbor, 2)], p3: [] }}
+            onSelectProject={nothing} onViewProjectOverview={nothing} onNewProject={nothing} />
+        </View>
+        <BottomNavBar activeTab="projects" onSelectTab={nothing} />
+      </>
+    );
+  if (s === 'new') screen = <NewProjectScreen onBack={nothing} onCreateScopeDraft={later} existingProjects={[]} />;
+  if (s === 'draft') screen = <ScopeDraftScreen project={{ ...cafe, draftScopeJson: JSON.stringify(draft) }} draft={draft} sourceConversation={conversation} onSaveDraft={later} onBack={nothing} onConfirmScope={later} />;
+  if (s === 'overview')
+    screen = (
+      <ProjectOverviewScreen currentProject={cafe} allProjects={[cafe, harbor, lakbay]} agreements={[agreement]} selectedAgreement={agreement} requests={[]} analyses={{}} proposals={{}}
+        onSelectProject={nothing} onSelectAgreementVersion={nothing} onNavigateToNewRequest={nothing} onBack={nothing} />
+    );
+  if (s === 'request') screen = <NewRequestScreen project={cafe} agreement={agreement} onBack={nothing} onAnalyze={later} onViewConfirmedScope={nothing} />;
+  if (s === 'review') screen = <ScopeReviewScreen project={cafe} agreement={agreement} analysis={analysis} onBack={nothing} onProceedToProposal={nothing} />;
+  if (s === 'proposal') screen = <ProposalEditorScreen project={cafe} agreement={agreement} proposal={proposal} availableItems={['Customer accounts with login']} onBack={nothing} />;
+  return <View style={{ flex: 1, backgroundColor: '#FFFFFF' }} testID="shot" accessibilityLabel={request}>{screen}</View>;
+}
