@@ -7,16 +7,15 @@ TypeScript. Android is the primary implementation, testing, and deployment targe
 the release deliverable is an installable APK. Preserve iOS compatibility and the
 existing web starter where practical, but neither is a gate for the Android release.
 
-Read `ARCHITECTURE.md` before implementation for technical specifications,
-directory layout, database schema, and security rules. Read `package.json`,
-`app.json`, and `eas.json` before changing dependencies or configuration.
+`README.md` describes the product, the technical stack, and the directory layout.
+Read `package.json`, `app.json`, and `eas.json` before changing dependencies or
+configuration. The database schema is defined by the migrations in
+`src/database/migrations/`.
 
-`ARCHITECTURE.md` defines an offline application with local SQLite data, private
-files, and on-device LLM inference. These are architectural requirements, not
-implemented starter features. The product domain, native inference binding,
-baseline model, and supported device budget still need selection. Do not add
-remote runtime dependencies. Record agreed decisions as the project develops;
-keep this guide, the README, and configuration consistent.
+OwlSet is an offline application with local SQLite data, private files, and
+on-device LLM inference. These are architectural requirements. Do not add remote
+runtime dependencies. Record agreed decisions as the project develops; keep this
+guide, the README, and configuration consistent.
 
 ## Current baseline and intended setup
 
@@ -144,8 +143,7 @@ and [EAS profiles](https://docs.expo.dev/build/eas-json/).
 
 ## Directory layout and navigation
 
-Use the canonical layout in `ARCHITECTURE.md` after the Router migration; create
-directories as needed. The core frontend directories include:
+Create directories as needed within this layout:
 
 ```text
 src/
@@ -214,7 +212,7 @@ See [Continuous Native Generation](https://docs.expo.dev/workflow/continuous-nat
 
 ## Environment and security
 
-Follow the local schema and security rules in `ARCHITECTURE.md`. Access SQLite
+Access SQLite
 through repositories and inference through its adapter/scheduler. Bind SQL values
 and validate imported files and generated output. Keep all core flows usable
 offline, including first launch; do not add cloud inference, login, telemetry,
@@ -254,8 +252,7 @@ and source commit used for each release.
 Install the APK on physical Android devices and test without Metro or Expo Go.
 Verify fresh installation, first launch, local model setup, inference, persistence,
 and relaunch in airplane mode; also test upgrading an existing installation without
-losing data. Follow the physical-device resource and network checks in
-`ARCHITECTURE.md`. A development client is not the standalone release artifact.
+losing data. A development client is not the standalone release artifact.
 
 Distribute offline upgrades as new APKs. Do not enable automatic EAS Update checks
 or add an OTA runtime dependency under the current offline architecture. EAS is

@@ -10,7 +10,7 @@ import { NativeLlamaAdapter } from '@/llm/adapters/nativeLlamaAdapter';
 // Roadmap P1.2 feasibility check: real on-device inference, no network, no fixtures.
 const N_CTX = 2048;
 
-// Fictional demo conversation from ROADMAP.md section 10.
+// Fictional demo conversation.
 const DEMO_CONVERSATION = `Client: I need five responsive pages: Home, About, Services, Portfolio, and Contact, with a contact form.
 Freelancer: The proposed fee is PHP 15,000, the timeline is two weeks, and two revision rounds are included.
 Client: Approved. Let's proceed.`;

@@ -49,7 +49,7 @@ export const colors = {
   },
 } as const;
 
-/** Kwagi's own colours, from MASCOT.md. Use them for anything drawn to match him. */
+/** Kwagi's own colours. Use them for anything drawn to match him. */
 export const kwagi = {
   body: '#346A74',
   bodyShade: '#2A5861',

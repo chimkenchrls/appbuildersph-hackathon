@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 
 
 import { Kwagi } from '@/components/kwagi/Kwagi';
 
-// Kwagi introduces himself, one line per click. The facts come from ABOUT_KWAGI.md.
+// Kwagi introduces himself, one line per click.
 const LINES: { text: string; shown?: ReactNode }[] = [
   { text: 'Hoo, me? I’m Kwagi, OwlSet’s owl. I keep watch over what you and your client agreed.' },
   { text: 'Yes, I’m a night owl. So are you, when your client’s morning starts at your bedtime.' },

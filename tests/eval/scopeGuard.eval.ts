@@ -1,4 +1,4 @@
-// Live check of ScopeGuard against a real model in LM Studio (ROADMAP.md section 9 cases).
+// Live check of ScopeGuard against a real model in LM Studio (the team's acceptance cases).
 // Not part of `npm test`. Start the LM Studio server with a model loaded, then run:
 //   npx jest --testMatch "**/tests/eval/*.eval.ts"
 // Optional: EVAL_MODEL=<model id> (default qwen/qwen3.5-9b), EVAL_URL=<base url>.
@@ -33,7 +33,7 @@ const engine = new LMStudioAdapter({
   timeoutMs: 240000,
 });
 
-// Fictional demo agreement from ROADMAP.md section 10.
+// Fictional demo agreement.
 const agreement: Agreement = {
   id: 'agr-eval',
   projectId: 'proj-eval',

@@ -297,9 +297,6 @@ demo/                  The promotional video, a separate Remotion project (see d
 docs/                  Deployment guide
 ```
 
-Further reading: [PROJECT.md](PROJECT.md) (product), [ARCHITECTURE.md](ARCHITECTURE.md),
-[BACKEND.md](BACKEND.md), [FRONTEND.md](FRONTEND.md), [MASCOT.md](MASCOT.md), [ROADMAP.md](ROADMAP.md).
-
 ### Web deployment
 
 The landing page is published to Vercel by GitHub Actions, only for a commit that CI has verified
