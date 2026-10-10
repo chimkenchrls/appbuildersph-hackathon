@@ -9,10 +9,6 @@ import { ScopeDemo } from '@/components/landing/ScopeDemo';
 import { StepTabs } from '@/components/landing/StepTabs';
 import { LANDING_CSS } from '@/components/landing/styles';
 import { StatusBadge } from '@/components/ui/StatusBadge';
-import { colors } from '@/constants/theme';
-
-const DESCRIPTION =
-  'OwlSet is an Android app, in development, that helps freelancers turn client conversations into a confirmed scope, compare new requests with it, and prepare change proposals.';
 
 const SECTIONS = [
   { id: 'why', label: 'Why' },
@@ -166,15 +162,10 @@ export default function RootScreen() {
 
   return (
     <div ref={scroller} className="lp" data-scroller>
+      {/* The description, link-preview tags and icons are in public/index.html, so they are in the page
+          before any script runs. */}
       <Head>
         <title>OwlSet</title>
-        <meta name="description" content={DESCRIPTION} />
-        <meta name="theme-color" content={colors.background} />
-        <meta property="og:type" content="website" />
-        <meta property="og:title" content="OwlSet: clear agreements for freelancers" />
-        <meta property="og:description" content={DESCRIPTION} />
-        <link rel="icon" type="image/png" href="/favicon.png" />
-        <link rel="apple-touch-icon" href="/favicon.png" />
       </Head>
       <style>{LANDING_CSS}</style>
       <div className="lp-grain" aria-hidden />
