@@ -9,10 +9,10 @@ import {
   ActivityIndicator,
   Image,
 } from 'react-native';
-import { HeaderBar } from '@/components/HeaderBar';
+import { HeaderBar } from '@/components/workspace/HeaderBar';
 import { colors, radii, spacing, shadows } from '@/constants/theme';
-import { AppIcon } from '@/components/Icon';
-import type { AppServices } from '@/services/bootstrapService';
+import { AppIcon } from '@/components/workspace/Icon';
+import type { AppServices } from '@/services/domain/bootstrapService';
 import type { Project } from '@/types/domain';
 import * as Clipboard from 'expo-clipboard';
 import * as DocumentPicker from 'expo-document-picker';

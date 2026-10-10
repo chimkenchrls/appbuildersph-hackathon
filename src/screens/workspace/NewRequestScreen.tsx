@@ -12,9 +12,9 @@ import {
 import * as Clipboard from 'expo-clipboard';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
-import { HeaderBar } from '@/components/HeaderBar';
+import { HeaderBar } from '@/components/workspace/HeaderBar';
 import { colors, radii, spacing, shadows } from '@/constants/theme';
-import { AppIcon } from '@/components/Icon';
+import { AppIcon } from '@/components/workspace/Icon';
 import { hapticImpactLight, hapticSuccess } from '@/utils/haptics';
 import type { Project, Agreement } from '@/types/domain';
 

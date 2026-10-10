@@ -148,7 +148,7 @@ There is no head-only variant yet. The app icon will need one.
 | `src/components/kwagi/Kwagi.tsx` | App component: blink, wave, reduced-motion handling. |
 | `src/components/kwagi/KwagiArt.tsx` | Generated layered art. Do not edit by hand. |
 | `src/components/kwagi/PageMascot.tsx` | Web-only cursor-following component, copied from the page-mascot skill. |
-| `src/screens/HomeScreen.tsx` | Native home screen showing the app Kwagi. |
+| `src/screens/workspace/HomeScreen.tsx` | Native home screen showing the app Kwagi. |
 | `src/screens/RootScreen.web.tsx` | Web landing screen showing the cursor-following Kwagi. `EXPO_PUBLIC_KWAGI_WEB_PREVIEW=1` also shows the app Kwagi there for testing; this switch is temporary. |
 | `scripts/build_kwagi_app.py` | Source of the app drawing. |
 | `scripts/generate_mascot_gemini.py` | Optional Gemini generation of sprite sheets. |

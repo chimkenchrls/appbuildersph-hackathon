@@ -8,11 +8,11 @@ import {
   ActivityIndicator,
   TextInput,
 } from 'react-native';
-import { HeaderBar } from '@/components/HeaderBar';
+import { HeaderBar } from '@/components/workspace/HeaderBar';
 import { colors, radii, spacing, shadows } from '@/constants/theme';
-import { AppIcon } from '@/components/Icon';
+import { AppIcon } from '@/components/workspace/Icon';
 import { hapticSuccess } from '@/utils/haptics';
-import type { AppServices } from '@/services/bootstrapService';
+import type { AppServices } from '@/services/domain/bootstrapService';
 
 interface SettingsScreenProps {
   services: AppServices | null;

@@ -1,4 +1,4 @@
-import { KasunduanVaultService as Vault } from '@/services/kasunduanVaultService';
+import { KasunduanVaultService as Vault } from '@/services/domain/kasunduanVaultService';
 import type { Repositories } from '@/database/repositories';
 import type { AgreementRepository } from '@/database/repositories/agreementRepository';
 import type { ProjectRepository } from '@/database/repositories/projectRepository';
@@ -6,9 +6,9 @@ import type { ProposalRepository } from '@/database/repositories/proposalReposit
 import type { ScopeGuardRepository } from '@/database/repositories/scopeGuardRepository';
 import type { SettingsRepository } from '@/database/repositories/settingsRepository';
 import type { LLMEngine } from '@/llm/contracts';
-import type { AppServices } from '@/services/bootstrapService';
-import type { BriefCraftService } from '@/services/briefCraftService';
-import type { KasunduanVaultService } from '@/services/kasunduanVaultService';
+import type { AppServices } from '@/services/domain/bootstrapService';
+import type { BriefCraftService } from '@/services/domain/briefCraftService';
+import type { KasunduanVaultService } from '@/services/domain/kasunduanVaultService';
 
 /** The parts of the backend the screens' adapters call. Tests supply in-memory versions. */
 export interface BackendPorts {

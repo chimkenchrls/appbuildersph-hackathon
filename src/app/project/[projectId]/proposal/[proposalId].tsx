@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
-import MissingRecordScreen from '@/screens/MissingRecordScreen';
-import ProposalScreen from '@/screens/ProposalScreen';
+import MissingRecordScreen from '@/screens/routed/MissingRecordScreen';
+import ProposalScreen from '@/screens/routed/ProposalScreen';
 import { routeId } from '@/utils/ids';
 
 export default function ProposalRoute() {

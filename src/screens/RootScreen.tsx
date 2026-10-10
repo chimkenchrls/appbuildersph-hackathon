@@ -1,5 +1,5 @@
-import { HomeScreen } from './HomeScreen';
-import DashboardScreen from './DashboardScreen';
+import { HomeScreen } from './workspace/HomeScreen';
+import DashboardScreen from './routed/DashboardScreen';
 import { isFixtureData } from '@/services/active';
 
 /** Native workspace. The web sibling preserves the existing landing page. */

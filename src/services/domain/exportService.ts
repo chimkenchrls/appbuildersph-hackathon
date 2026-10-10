@@ -5,7 +5,7 @@ import { transaction } from '@/database/transaction';
 import { ProjectSchema, AgreementSchema, RequestSchema, AnalysisSchema, ProposalSchema } from '@/safety/persistedSchemas';
 import { draftKey, parseStoredDraft, ScopeDraftSchema } from '@/safety/scopeDraft';
 import { cleanDraft } from '@/safety/validation';
-import { ServiceError } from './errors';
+import { ServiceError } from '../errors';
 
 const maxBackupLength = 5_000_000;
 const records = <T extends z.ZodType>(schema: T) => z.array(schema).max(1000);

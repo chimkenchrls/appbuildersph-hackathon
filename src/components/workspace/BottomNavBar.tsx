@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet, Text, Pressable, View } from 'react-native';
 import { colors, spacing } from '@/constants/theme';
-import { AppIcon } from '@/components/Icon';
+import { AppIcon } from '@/components/workspace/Icon';
 
 export type RootTab = 'projects' | 'agreements' | 'settings';
 

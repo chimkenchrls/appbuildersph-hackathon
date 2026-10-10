@@ -8,10 +8,10 @@ import {
   Alert,
   Platform,
 } from 'react-native';
-import { HeaderBar } from '@/components/HeaderBar';
+import { HeaderBar } from '@/components/workspace/HeaderBar';
 import { colors, radii, spacing, shadows } from '@/constants/theme';
-import { CardWatermarkSvg } from '@/components/CardWatermarkSvg';
-import { AppIcon } from '@/components/Icon';
+import { CardWatermarkSvg } from '@/components/workspace/CardWatermarkSvg';
+import { AppIcon } from '@/components/workspace/Icon';
 import type { Project, Agreement } from '@/types/domain';
 
 export type ProjectFilter = 'all' | 'drafting' | 'accepted';

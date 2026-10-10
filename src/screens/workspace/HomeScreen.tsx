@@ -7,22 +7,22 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { initializeBackendAsync, type AppServices } from '@/services/bootstrapService';
+import { initializeBackendAsync, type AppServices } from '@/services/domain/bootstrapService';
 import { getDatabaseAsync } from '@/database/client';
 import { seedDemoDataAsync } from '@/database/seed';
 import { colors } from '@/constants/theme';
-import { SlideTransition } from '@/components/SlideTransition';
-import { BottomNavBar, type RootTab } from '@/components/BottomNavBar';
-import { ProjectsScreen } from '@/screens/ProjectsScreen';
-import { NewProjectScreen } from '@/screens/NewProjectScreen';
-import { ScopeDraftScreen } from '@/screens/ScopeDraftScreen';
-import { ProjectOverviewScreen } from '@/screens/ProjectOverviewScreen';
-import { NewRequestScreen } from '@/screens/NewRequestScreen';
-import { ScopeReviewScreen } from '@/screens/ScopeReviewScreen';
-import { ProposalEditorScreen } from '@/screens/ProposalEditorScreen';
-import { AgreementsScreen } from '@/screens/AgreementsScreen';
-import { SettingsScreen } from '@/screens/SettingsScreen';
-import { OnboardingScreen } from '@/screens/OnboardingScreen';
+import { SlideTransition } from '@/components/workspace/SlideTransition';
+import { BottomNavBar, type RootTab } from '@/components/workspace/BottomNavBar';
+import { ProjectsScreen } from '@/screens/workspace/ProjectsScreen';
+import { NewProjectScreen } from '@/screens/workspace/NewProjectScreen';
+import { ScopeDraftScreen } from '@/screens/workspace/ScopeDraftScreen';
+import { ProjectOverviewScreen } from '@/screens/workspace/ProjectOverviewScreen';
+import { NewRequestScreen } from '@/screens/workspace/NewRequestScreen';
+import { ScopeReviewScreen } from '@/screens/workspace/ScopeReviewScreen';
+import { ProposalEditorScreen } from '@/screens/workspace/ProposalEditorScreen';
+import { AgreementsScreen } from '@/screens/workspace/AgreementsScreen';
+import { SettingsScreen } from '@/screens/workspace/SettingsScreen';
+import { OnboardingScreen } from '@/screens/workspace/OnboardingScreen';
 import type {
   Project,
   Agreement,

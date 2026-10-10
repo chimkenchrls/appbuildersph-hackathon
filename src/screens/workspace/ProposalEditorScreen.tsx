@@ -12,9 +12,9 @@ import {
   Pressable,
   Share,
 } from 'react-native';
-import { HeaderBar } from '@/components/HeaderBar';
+import { HeaderBar } from '@/components/workspace/HeaderBar';
 import { colors, spacing, shadows } from '@/constants/theme';
-import { AppIcon } from '@/components/Icon';
+import { AppIcon } from '@/components/workspace/Icon';
 import * as Clipboard from 'expo-clipboard';
 import { hapticImpactLight, hapticSuccess } from '@/utils/haptics';
 import type { Project, Agreement, ChangeProposal } from '@/types/domain';

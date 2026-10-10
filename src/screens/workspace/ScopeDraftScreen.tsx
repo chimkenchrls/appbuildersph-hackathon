@@ -9,9 +9,9 @@ import {
   Modal,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { HeaderBar } from '@/components/HeaderBar';
+import { HeaderBar } from '@/components/workspace/HeaderBar';
 import { colors, radii, spacing, shadows } from '@/constants/theme';
-import { AppIcon } from '@/components/Icon';
+import { AppIcon } from '@/components/workspace/Icon';
 import { hapticSuccess, hapticImpactLight } from '@/utils/haptics';
 import { useExitGuard } from '@/hooks/useExitGuard';
 import { parseEstimate } from '@/safety/parseEstimate';

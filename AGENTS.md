@@ -151,12 +151,12 @@ directories as needed. The core frontend directories include:
 ```text
 src/
   app/             # Routes and _layout.tsx navigators only
-  components/      # Shared UI
-  screens/         # Screen implementations composed by routes
+  components/      # Shared UI: ui/ (kit), workspace/ (app chrome), landing/, kwagi/
+  screens/         # RootScreen pair, workspace/ (the app's screens), routed/ (screens opened by route)
   features/        # Feature-specific UI and business logic
   hooks/           # Shared React hooks
   database/        # SQLite migrations and repositories
-  services/        # Bootstrap, storage, model lifecycle, and orchestration
+  services/        # domain/ (business services), backend/ and fixtures/ (adapters), screen-facing helpers
   llm/             # Engine contracts, adapter, scheduler, and prompt building
   safety/          # Local policy and validation boundaries
   utils/           # Pure helpers

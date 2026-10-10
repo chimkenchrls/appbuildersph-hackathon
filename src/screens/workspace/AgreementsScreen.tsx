@@ -7,9 +7,9 @@ import {
   Pressable,
   Platform,
 } from 'react-native';
-import { HeaderBar } from '@/components/HeaderBar';
+import { HeaderBar } from '@/components/workspace/HeaderBar';
 import { colors, radii, spacing, shadows } from '@/constants/theme';
-import { CardWatermarkSvg } from '@/components/CardWatermarkSvg';
+import { CardWatermarkSvg } from '@/components/workspace/CardWatermarkSvg';
 import type { Project, Agreement } from '@/types/domain';
 
 interface AgreementsScreenProps {

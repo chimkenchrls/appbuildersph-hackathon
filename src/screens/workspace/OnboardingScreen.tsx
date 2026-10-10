@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, radii, spacing, shadows } from '@/constants/theme';
-import { AppIcon } from '@/components/Icon';
+import { AppIcon } from '@/components/workspace/Icon';
 import { hapticSuccess, hapticWarning, hapticImpactLight } from '@/utils/haptics';
 
 interface OnboardingScreenProps {
@@ -113,7 +113,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             <View style={styles.stepContainer}>
               <View style={styles.mascotWrapper}>
                 <Image
-                  source={require('../../assets/owl_mascot.png')}
+                  source={require('../../../assets/owl_mascot.png')}
                   style={styles.mascotImage}
                   resizeMode="contain"
                   accessibilityLabel="OwlSet Mascot"
@@ -143,7 +143,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             <View style={styles.stepContainer}>
               <View style={styles.mascotWrapperSmall}>
                 <Image
-                  source={require('../../assets/owl_mascot.png')}
+                  source={require('../../../assets/owl_mascot.png')}
                   style={styles.mascotImageSmall}
                   resizeMode="contain"
                   accessibilityLabel="OwlSet Mascot"
@@ -200,7 +200,7 @@ export function OnboardingScreen({ onComplete }: OnboardingScreenProps) {
             <View style={styles.stepContainer}>
               <View style={styles.mascotWrapperSmall}>
                 <Image
-                  source={require('../../assets/owl_mascot.png')}
+                  source={require('../../../assets/owl_mascot.png')}
                   style={styles.mascotImageSmall}
                   resizeMode="contain"
                   accessibilityLabel="OwlSet Mascot"

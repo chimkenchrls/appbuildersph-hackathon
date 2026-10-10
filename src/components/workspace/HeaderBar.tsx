@@ -1,8 +1,8 @@
 import React from 'react';
 import { StyleSheet, Text, View, Pressable } from 'react-native';
 import { colors, spacing } from '@/constants/theme';
-import { AppIcon } from '@/components/Icon';
-import { MarqueeText } from '@/components/MarqueeText';
+import { AppIcon } from '@/components/workspace/Icon';
+import { MarqueeText } from '@/components/workspace/MarqueeText';
 
 interface HeaderBarProps {
   title: string;

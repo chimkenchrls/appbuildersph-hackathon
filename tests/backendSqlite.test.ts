@@ -18,14 +18,14 @@ import type { LLMEngine } from '@/llm/contracts';
 import { createBackendAi } from '@/services/backend/backendAi';
 import { createBackendData } from '@/services/backend/backendData';
 import type { BackendPorts } from '@/services/backend/ports';
-import { BriefCraftService } from '@/services/briefCraftService';
-import { KasunduanVaultService } from '@/services/kasunduanVaultService';
+import { BriefCraftService } from '@/services/domain/briefCraftService';
+import { KasunduanVaultService } from '@/services/domain/kasunduanVaultService';
 import { createWorkflows } from '@/services/workflows';
 import { validateFindings } from '@/safety/validateFindings';
 import { getDatabaseAsync } from '@/database/client';
-import { ScopeGuardService } from '@/services/scopeGuardService';
-import { ExportService } from '@/services/exportService';
-import { initializeBackendAsync } from '@/services/bootstrapService';
+import { ScopeGuardService } from '@/services/domain/scopeGuardService';
+import { ExportService } from '@/services/domain/exportService';
+import { initializeBackendAsync } from '@/services/domain/bootstrapService';
 
 jest.mock('@/database/client', () => ({ getDatabaseAsync: jest.fn() }));
 

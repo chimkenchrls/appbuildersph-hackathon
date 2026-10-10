@@ -1,5 +1,5 @@
-import { KasunduanVaultService } from '@/services/kasunduanVaultService';
-import { BriefCraftService } from '@/services/briefCraftService';
+import { KasunduanVaultService } from '@/services/domain/kasunduanVaultService';
+import { BriefCraftService } from '@/services/domain/briefCraftService';
 import { LLMEngineUnavailableError, LLMGenerationTimeoutError, type LLMEngine } from '@/llm/contracts';
 import { errorMessage } from '@/services/errors';
 import { createBackendAi } from '@/services/backend/backendAi';

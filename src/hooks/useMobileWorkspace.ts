@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
-import { initializeBackendAsync, type AppServices } from '@/services/bootstrapService';
-import type { RootTab } from '@/components/BottomNavBar';
+import { initializeBackendAsync, type AppServices } from '@/services/domain/bootstrapService';
+import type { RootTab } from '@/components/workspace/BottomNavBar';
 import { LLMEngineUnavailableError, LLMGenerationTimeoutError, LLMParseError } from '@/llm/contracts';
 import { ScopeDraftSchema } from '@/types/schemas';
 import { AgreementSchema } from '@/safety/persistedSchemas';

@@ -7,9 +7,9 @@ import {
   Pressable,
   Modal,
 } from 'react-native';
-import { HeaderBar } from '@/components/HeaderBar';
+import { HeaderBar } from '@/components/workspace/HeaderBar';
 import { colors, spacing, shadows } from '@/constants/theme';
-import { AppIcon } from '@/components/Icon';
+import { AppIcon } from '@/components/workspace/Icon';
 import { hapticWarning, hapticSuccess, hapticImpactLight } from '@/utils/haptics';
 import type { Project, Agreement, ScopeGuardAnalysis, Finding } from '@/types/domain';
 

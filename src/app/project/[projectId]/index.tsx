@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
-import MissingRecordScreen from '@/screens/MissingRecordScreen';
-import WorkspaceScreen from '@/screens/WorkspaceScreen';
+import MissingRecordScreen from '@/screens/routed/MissingRecordScreen';
+import WorkspaceScreen from '@/screens/routed/WorkspaceScreen';
 import { routeId } from '@/utils/ids';
 
 export default function ProjectRoute() {

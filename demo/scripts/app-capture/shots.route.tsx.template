@@ -1,14 +1,14 @@
 // TEMPORARY capture harness for the demo video. Not part of the app; removed after use.
 import { useLocalSearchParams } from 'expo-router';
 import { View } from 'react-native';
-import { BottomNavBar } from '@/components/BottomNavBar';
-import { NewProjectScreen } from '@/screens/NewProjectScreen';
-import { NewRequestScreen } from '@/screens/NewRequestScreen';
-import { ProjectOverviewScreen } from '@/screens/ProjectOverviewScreen';
-import { ProjectsScreen } from '@/screens/ProjectsScreen';
-import { ProposalEditorScreen } from '@/screens/ProposalEditorScreen';
-import { ScopeDraftScreen } from '@/screens/ScopeDraftScreen';
-import { ScopeReviewScreen } from '@/screens/ScopeReviewScreen';
+import { BottomNavBar } from '@/components/workspace/BottomNavBar';
+import { NewProjectScreen } from '@/screens/workspace/NewProjectScreen';
+import { NewRequestScreen } from '@/screens/workspace/NewRequestScreen';
+import { ProjectOverviewScreen } from '@/screens/workspace/ProjectOverviewScreen';
+import { ProjectsScreen } from '@/screens/workspace/ProjectsScreen';
+import { ProposalEditorScreen } from '@/screens/workspace/ProposalEditorScreen';
+import { ScopeDraftScreen } from '@/screens/workspace/ScopeDraftScreen';
+import { ScopeReviewScreen } from '@/screens/workspace/ScopeReviewScreen';
 import type { Agreement, ChangeProposal, Project, ScopeDraft, ScopeGuardAnalysis } from '@/types/domain';
 
 const now = '2026-10-10T02:00:00.000Z';

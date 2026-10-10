@@ -12,10 +12,10 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Circle, Path } from 'react-native-svg';
-import { HeaderBar } from '@/components/HeaderBar';
+import { HeaderBar } from '@/components/workspace/HeaderBar';
 import { colors, radii, spacing, shadows } from '@/constants/theme';
-import { AppIcon } from '@/components/Icon';
-import { ShareService } from '@/services/shareService';
+import { AppIcon } from '@/components/workspace/Icon';
+import { ShareService } from '@/services/domain/shareService';
 import { hapticSuccess, hapticImpactLight } from '@/utils/haptics';
 import type {
   Project,

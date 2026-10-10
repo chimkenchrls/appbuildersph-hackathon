@@ -14,7 +14,7 @@ let backend: Promise<BackendPorts> | null = null;
 /** Opens the database, runs migrations and builds the services on first use. */
 function getBackend(): Promise<BackendPorts> {
   // Imported on demand so a fixture run never loads SQLite.
-  backend ??= import('./bootstrapService')
+  backend ??= import('./domain/bootstrapService')
     .then(async module => portsFrom(await module.initializeBackendAsync()))
     .catch(error => {
       // Let the next call retry instead of caching the failure.

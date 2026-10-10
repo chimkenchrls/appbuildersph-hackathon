@@ -1,6 +1,6 @@
 import { useLocalSearchParams } from 'expo-router';
-import MissingRecordScreen from '@/screens/MissingRecordScreen';
-import ScopeGuardScreen from '@/screens/ScopeGuardScreen';
+import MissingRecordScreen from '@/screens/routed/MissingRecordScreen';
+import ScopeGuardScreen from '@/screens/routed/ScopeGuardScreen';
 import { routeId } from '@/utils/ids';
 
 export default function RequestRoute() {

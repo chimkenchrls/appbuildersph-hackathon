@@ -1,9 +1,9 @@
 import { act, fireEvent, render, renderHook, screen, waitFor } from '@testing-library/react-native';
 import { router } from 'expo-router';
-import { initializeBackendAsync, type AppServices } from '@/services/bootstrapService';
+import { initializeBackendAsync, type AppServices } from '@/services/domain/bootstrapService';
 import { useMobileWorkspace } from '@/hooks/useMobileWorkspace';
-import { ScopeDraftScreen } from '@/screens/ScopeDraftScreen';
-import { ProposalEditorScreen } from '@/screens/ProposalEditorScreen';
+import { ScopeDraftScreen } from '@/screens/workspace/ScopeDraftScreen';
+import { ProposalEditorScreen } from '@/screens/workspace/ProposalEditorScreen';
 import { LLMEngineUnavailableError } from '@/llm/contracts';
 import type { ScopeDraft } from '@/types/domain';
 
@@ -15,8 +15,8 @@ jest.mock('expo-router', () => ({
   router: { push: jest.fn(), replace: jest.fn(), back: jest.fn(), canGoBack: () => true },
 }));
 jest.mock('expo-router/react-navigation', () => ({ usePreventRemove: jest.fn() }));
-jest.mock('@/services/bootstrapService', () => ({ initializeBackendAsync: jest.fn() }));
-jest.mock('@/components/Icon', () => ({ AppIcon: () => null }));
+jest.mock('@/services/domain/bootstrapService', () => ({ initializeBackendAsync: jest.fn() }));
+jest.mock('@/components/workspace/Icon', () => ({ AppIcon: () => null }));
 jest.mock('@/utils/haptics', () => ({ hapticSuccess: jest.fn(), hapticImpactLight: jest.fn() }));
 jest.mock('react-native-safe-area-context', () => jest.requireActual('react-native-safe-area-context/jest/mock').default);
 jest.mock('expo-clipboard', () => ({ setStringAsync: jest.fn() }));

@@ -1,10 +1,10 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import DashboardScreen from '@/screens/DashboardScreen';
-import WorkspaceScreen from '@/screens/WorkspaceScreen';
-import ProposalScreen from '@/screens/ProposalScreen';
-import ScopeGuardScreen from '@/screens/ScopeGuardScreen';
-import MissingRecordScreen from '@/screens/MissingRecordScreen';
+import DashboardScreen from '@/screens/routed/DashboardScreen';
+import WorkspaceScreen from '@/screens/routed/WorkspaceScreen';
+import ProposalScreen from '@/screens/routed/ProposalScreen';
+import ScopeGuardScreen from '@/screens/routed/ScopeGuardScreen';
+import MissingRecordScreen from '@/screens/routed/MissingRecordScreen';
 import * as Clipboard from 'expo-clipboard';
 import { router } from 'expo-router';
 import { data } from '@/services/active';
