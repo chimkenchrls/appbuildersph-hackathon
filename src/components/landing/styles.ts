@@ -5,7 +5,7 @@ import { colors } from '@/constants/theme';
  * grid, sticky positioning, :hover and :focus-visible, and media queries directly.
  * Colours come from the app's theme tokens; nothing here defines a new palette.
  *
- * Layers: page content (auto), the control watermark (0), the top bar (10), grain (20), skip link (30).
+ * Layers: page content (auto), the top bar (10), grain (20), skip link (30).
  */
 export const LANDING_CSS = `
 @font-face {
@@ -109,7 +109,8 @@ html, body { background: ${colors.background}; color-scheme: dark; }
 }
 .lp-bar[data-scrolled]::after { opacity: 1; }
 .lp-bar-row { display: flex; align-items: stretch; justify-content: space-between; height: var(--bar); }
-.lp-brand { display: flex; align-items: center; font-size: 1.375rem; font-weight: 600; letter-spacing: -0.03em; color: var(--mint); }
+.lp-brand { display: flex; align-items: center; gap: 8px; font-size: 1.375rem; font-weight: 600; letter-spacing: -0.03em; color: var(--mint); }
+.lp-brand-logo { display: block; width: 48px; height: 32px; object-fit: contain; flex-shrink: 0; }
 .lp-brand-sm { font-size: 1.125rem; }
 .lp-nav { position: relative; display: flex; align-items: stretch; }
 .lp-nav a {
@@ -298,15 +299,6 @@ html, body { background: ${colors.background}; color-scheme: dark; }
 .lp-control { position: relative; overflow: hidden; background: var(--brand); color: var(--on-brand); border-top: 0; }
 .lp-control .lp-body { color: color-mix(in srgb, var(--on-brand) 92%, transparent); }
 .lp-control :focus-visible { outline-color: var(--on-brand); }
-.lp-control-mark {
-  position: absolute; z-index: 0; right: -0.06em; bottom: -0.24em; font-family: var(--mono); font-weight: 600;
-  font-size: clamp(11.25rem, 30vw, 27.5rem); line-height: 1; letter-spacing: -0.06em;
-  --ink: color-mix(in srgb, var(--brand) 86%, black);
-  color: var(--ink); -webkit-text-stroke: 2px var(--ink);
-  transition: color 1100ms var(--ease-in-out) 200ms;
-  user-select: none; pointer-events: none;
-}
-.lp[data-js] .lp-control:not([data-in]) .lp-control-mark { color: transparent; }
 .lp-control { --pb: clamp(84px, 10vw, 144px); }
 .lp-control .lp-wrap { position: relative; }
 /* Statements on the left; on the right a phone that rises out of the bottom of the band. */
@@ -464,8 +456,6 @@ html, body { background: ${colors.background}; color-scheme: dark; }
   @starting-style { .lp-swap { transform: none; filter: none; } }
   .lp-st { transition: none; }
   .lp[data-js] [data-reveal]:not([data-in]) .lp-st { opacity: 1; transform: none; }
-  .lp-control-mark { transition: none; }
-  .lp[data-js] .lp-control:not([data-in]) .lp-control-mark { color: var(--ink); }
   .lp-skip { transition: none; }
   .lp-says-col { transition: none; }
   .lp-says-arrow { animation: none; }
