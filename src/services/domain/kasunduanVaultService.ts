@@ -1,6 +1,9 @@
 import type { AgreementRepository } from '@/database/repositories/agreementRepository';
 import type { ScopeDraft, Agreement, ContractOptions } from '@/types/domain';
 import { ContractGeneratorService } from './contractGeneratorService';
+import { ServiceError } from '../errors';
+import { finiteEstimate, wholeWorkingDays, limits, textValue } from '@/safety/validation';
+import { conflictingExclusions } from '@/safety/scopeExclusions';
 
 export class KasunduanVaultService {
   constructor(private readonly agreementRepo: AgreementRepository) {}
@@ -52,7 +55,7 @@ export class KasunduanVaultService {
   }): Promise<Agreement> {
     const {
       projectId,
-      currentAgreement,
+      currentAgreement: requestedAgreement,
       additionalDeliverables,
       additionalFee,
       additionalDays,
@@ -61,19 +64,22 @@ export class KasunduanVaultService {
       clientSignatureData,
     } = options;
 
-    const existingAgreements = await this.agreementRepo.listByProjectId(projectId);
-    const nextVersion =
-      existingAgreements.length > 0
-        ? existingAgreements[0].versionNumber + 1
-        : currentAgreement.versionNumber + 1;
+    const currentAgreement = await this.agreementRepo.getLatestByProjectId(projectId);
+    if (!currentAgreement || requestedAgreement.projectId !== projectId || currentAgreement.id !== requestedAgreement.id) throw new ServiceError('conflict');
+    if (!Array.isArray(additionalDeliverables) || !additionalDeliverables.length || additionalDeliverables.length > limits.items
+      || !finiteEstimate(additionalFee ?? null) || !wholeWorkingDays(additionalDays ?? null)) throw new ServiceError('invalid_input');
+    const nextVersion = currentAgreement.versionNumber + 1;
 
     // Build new requirements
     const currentRequirements = [...currentAgreement.requirements];
     let nextReqNum = currentRequirements.length + 1;
+    const requirementIds = new Set(currentRequirements.map(requirement => requirement.id));
 
     const newRequirements = additionalDeliverables.map((item) => {
+      while (requirementIds.has(`REQ-${String(nextReqNum).padStart(2, '0')}`)) nextReqNum++;
       const id = `REQ-${String(nextReqNum++).padStart(2, '0')}`;
-      const title = typeof item === 'string' ? item : item.title;
+      requirementIds.add(id);
+      const title = textValue(typeof item === 'string' ? item : item?.title, limits.item);
       const description =
         (typeof item === 'object' && item.description) ||
         `Agreed deliverable addition incorporated into Agreement v${nextVersion}.`;
@@ -86,45 +92,68 @@ export class KasunduanVaultService {
     });
 
     const updatedRequirements = [...currentRequirements, ...newRequirements];
-    const updatedBudget = (currentAgreement.budgetAmount || 0) + (additionalFee || 0);
-    const updatedDays = (currentAgreement.durationDays || 0) + (additionalDays || 0);
+    const conflicts = conflictingExclusions({ requirements: updatedRequirements, exclusions: currentAgreement.exclusions });
+    // An agreed addition does not establish an unspecified base total.
+    const updatedBudget = currentAgreement.budgetAmount === null
+      ? null : currentAgreement.budgetAmount + (additionalFee ?? 0);
+    const updatedDays = currentAgreement.durationDays === null
+      ? null : currentAgreement.durationDays + (additionalDays ?? 0);
+    const budgetNotes = updatedBudget === null && additionalFee != null
+      ? [currentAgreement.budgetNotes,
+        `Additional ${currentAgreement.budgetCurrency} ${additionalFee.toLocaleString('en-US', { maximumSignificantDigits: 21 })} agreed in v${nextVersion}`]
+        .filter(Boolean).join('\n')
+      : currentAgreement.budgetNotes;
+    const timelineNotes = updatedDays === null && additionalDays != null
+      ? [currentAgreement.timelineNotes, `Additional ${additionalDays} working days agreed in v${nextVersion}`]
+        .filter(Boolean).join('\n')
+      : additionalDays
+        ? `${updatedDays} days (extended by ${additionalDays} days for additions)`
+        : currentAgreement.timelineNotes;
 
     const baseTitle = currentAgreement.title.split(' · ')[0] || 'Project Scope';
 
     const draftToConfirm: ScopeDraft = {
       title: baseTitle,
       requirements: updatedRequirements,
-      budgetAmount: updatedBudget > 0 ? updatedBudget : currentAgreement.budgetAmount,
+      budgetAmount: updatedBudget,
       budgetCurrency: currentAgreement.budgetCurrency,
-      budgetNotes: currentAgreement.budgetNotes,
-      durationDays: updatedDays > 0 ? updatedDays : currentAgreement.durationDays,
+      budgetNotes,
+      durationDays: updatedDays,
       deadline: currentAgreement.deadline,
-      timelineNotes: additionalDays
-        ? `${updatedDays} days (extended by ${additionalDays} days for additions)`
-        : currentAgreement.timelineNotes,
+      timelineNotes,
       revisionTerms: currentAgreement.revisionTerms,
-      exclusions: currentAgreement.exclusions,
+      exclusions: currentAgreement.exclusions.filter(item => !conflicts.includes(item)),
       missingInformation: currentAgreement.missingInformation,
       taxTreatment: currentAgreement.taxTreatment,
     };
 
-    const newAgmt = await this.confirmScope(
-      projectId,
-      draftToConfirm,
-      customTitle || `${baseTitle} · Agreement v${nextVersion}`,
-    );
+    const now = new Date().toISOString();
+    return this.agreementRepo.createRevision({
+      ...draftToConfirm,
+      id: `agmt_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+      projectId, versionNumber: nextVersion,
+      title: customTitle?.trim() || `${baseTitle} · Agreement v${nextVersion}`,
+      confirmedAt: now,
+      ...(clientSignatoryName ? { clientApprovedAt: now, clientSignatoryName, clientSignatureData: clientSignatureData ?? null } : {}),
+    }, currentAgreement.id);
+  }
 
-    if (clientSignatoryName) {
-      await this.agreementRepo.recordClientApproval(
-        newAgmt.id,
-        clientSignatoryName,
-        clientSignatureData,
-      );
-      const withApproval = await this.agreementRepo.getById(newAgmt.id);
-      if (withApproval) return withApproval;
-    }
-
-    return newAgmt;
+  /** Correct a sealed scope by adding a version, keeping every earlier record intact. */
+  async resolveExclusionConflicts(projectId: string, requestedAgreement: Agreement): Promise<Agreement> {
+    const current = await this.agreementRepo.getLatestByProjectId(projectId);
+    if (!current || requestedAgreement.projectId !== projectId || current.id !== requestedAgreement.id) throw new ServiceError('conflict');
+    const conflicts = conflictingExclusions(current);
+    if (!conflicts.length) throw new ServiceError('invalid_input');
+    const nextVersion = current.versionNumber + 1;
+    return this.agreementRepo.createRevision({
+      ...current,
+      id: `agmt_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+      versionNumber: nextVersion,
+      title: `${current.title.split(' · ')[0]} · Agreement v${nextVersion}`,
+      exclusions: current.exclusions.filter(item => !conflicts.includes(item)),
+      confirmedAt: new Date().toISOString(),
+      clientApprovedAt: null, clientSignatoryName: null, clientSignatureData: null,
+    }, current.id);
   }
 
   generateContract(agreement: Agreement, options?: ContractOptions): string {

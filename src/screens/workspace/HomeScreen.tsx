@@ -8,6 +8,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { initializeBackendAsync, type AppServices } from '@/services/domain/bootstrapService';
+import { KasunduanVaultService } from '@/services/domain/kasunduanVaultService';
+import { ServiceError, errorMessage, extractionFailure } from '@/services/errors';
 import { getDatabaseAsync } from '@/database/client';
 import { seedDemoDataAsync } from '@/database/seed';
 import { colors } from '@/constants/theme';
@@ -79,8 +81,6 @@ export function HomeScreen() {
     async function initialize() {
       try {
         const backend = await initializeBackendAsync();
-        // Clean up duplicate projects if any exist in the database
-        await backend.repositories.project.cleanupDuplicates();
         const loadedProjects = await backend.repositories.project.list();
 
         const agreementsMap: Record<string, Agreement[]> = {};
@@ -442,22 +442,20 @@ export function HomeScreen() {
       throw new Error(`A project named "${data.projectName}" already exists.`);
     }
 
-    // Fast brief extraction (local LLM or instant heuristic fallback)
+    // The service answers with the model, or with its labelled rule-based extractor when no
+    // engine is available. Any other failure (too long, timeout, unusable answer) is shown to
+    // the user; it is never turned into a draft that looks like a model result.
     let extractedDraft: ScopeDraft;
     try {
       extractedDraft = await services.services.briefCraft.extractBrief(
         data.conversation,
         data.projectName,
       );
-      extractedDraft.title = data.projectName;
-      extractedDraft.sourceConversation = data.conversation;
-    } catch {
-      extractedDraft = services.services.briefCraft.extractBriefHeuristic(
-        data.conversation,
-        data.projectName,
-      );
-      extractedDraft.sourceConversation = data.conversation;
+    } catch (reason) {
+      throw extractionFailure(reason);
     }
+    extractedDraft.title = data.projectName;
+    extractedDraft.sourceConversation = data.conversation;
 
     let targetProj: Project;
     if (currentDraftProjectId) {
@@ -563,76 +561,66 @@ export function HomeScreen() {
     }
   };
 
-  const handleAnalyzeRequest = async (requestText: string) => {
-    if (!services || !activeProject) return;
+  const handleAnalyzeRequest = async (requestText: string, storedRequest?: ClientRequest) => {
+    if (!services || !activeProject) throw new Error(errorMessage(new ServiceError('not_found')));
+    const targetAgreement = storedRequest
+      ? await services.repositories.agreement.getById(storedRequest.agreementId)
+      : activeAgreement || activeAgreements[0];
+    if (!targetAgreement) throw new Error('Confirm your project scope before analyzing a request.');
+    setAnalysis(null);
+    setProposal(null);
 
     try {
-      const targetAgreement = activeAgreement || activeAgreements[0];
-      if (!targetAgreement) return;
-
       const newAnalysis = await services.services.scopeGuard.analyzeRequest({
         projectId: activeProject.id,
         agreementId: targetAgreement.id,
         requestText,
+        requestId: storedRequest?.id,
       });
-      setAnalysis(newAnalysis);
-
       // Generate proposal draft from findings
       const potentialItems = newAnalysis.findings
         .filter((f) => f.classification === 'potential_additional')
         .map((f) => f.item);
 
-      const newProposal = await services.services.changeDesk.draftProposal({
+      const newProposal = potentialItems.length ? await services.services.changeDesk.draftProposal({
         projectId: activeProject.id,
         analysisId: newAnalysis.id,
         selectedItems: potentialItems,
         freelancerFeeEstimate: 0,
         freelancerDaysEstimate: 0,
         currency: targetAgreement.budgetCurrency || 'PHP',
-      });
+      }) : null;
+      setAnalysis(newAnalysis);
       setProposal(newProposal);
+      if (newProposal) setProposalsMap(previous => ({ ...previous, [newAnalysis.id]: newProposal }));
 
       await refreshProjectRequests(activeProject.id);
       navigateToSubScreen('review', 'forward');
-    } catch {
-      // Offline fallback
-      navigateToSubScreen('review', 'forward');
+    } catch (reason) {
+      throw extractionFailure(reason);
     }
   };
 
   const handleSaveRequest = async (requestText: string) => {
-    if (!services || !activeProject) return;
+    if (!services || !activeProject) throw new Error(errorMessage(new ServiceError('not_found')));
+    const targetAgreement = activeAgreement || activeAgreements[0];
+    if (!targetAgreement) throw new Error('Confirm your project scope before saving a request.');
 
+    let savedRequest: ClientRequest;
     try {
-      const targetAgreement = activeAgreement || activeAgreements[0];
-      if (!targetAgreement) return;
-
-      const newAnalysis = await services.services.scopeGuard.analyzeRequest({
+      savedRequest = await services.services.scopeGuard.saveRequest({
         projectId: activeProject.id,
         agreementId: targetAgreement.id,
         requestText,
       });
-      setAnalysis(newAnalysis);
-
-      const potentialItems = newAnalysis.findings
-        .filter((f) => f.classification === 'potential_additional')
-        .map((f) => f.item);
-
-      const newProposal = await services.services.changeDesk.draftProposal({
-        projectId: activeProject.id,
-        analysisId: newAnalysis.id,
-        selectedItems: potentialItems,
-        freelancerFeeEstimate: 0,
-        freelancerDaysEstimate: 0,
-        currency: targetAgreement.budgetCurrency || 'PHP',
-      });
-      setProposal(newProposal);
-
-      await refreshProjectRequests(activeProject.id);
-      navigateToSubScreen('overview', 'backward');
-    } catch {
-      navigateToSubScreen('overview', 'backward');
+    } catch (reason) {
+      throw new Error(errorMessage(reason instanceof ServiceError ? reason : new ServiceError('save_failed')));
     }
+    setProjectRequests(prev => ({
+      ...prev,
+      [activeProject.id]: [savedRequest, ...(prev[activeProject.id] || [])],
+    }));
+    navigateToSubScreen('overview', 'backward');
   };
 
   const handleAcceptRequest = async (
@@ -643,26 +631,24 @@ export function HomeScreen() {
     signatoryName?: string | null,
     approvalNotes?: string | null,
   ) => {
-    if (!services || !activeProject) return;
+    if (!services || !activeProject) throw new ServiceError('not_found');
     const targetAgreement = activeAgreement || activeAgreements[0];
-    if (!targetAgreement) return;
+    if (!targetAgreement) throw new ServiceError('not_found');
 
     try {
-      const nextAgmt = await services.services.kasunduanVault.acceptScopeChange({
-        projectId: activeProject.id,
-        currentAgreement: targetAgreement,
-        additionalDeliverables: additions,
-        additionalFee: additionalFee ?? undefined,
-        additionalDays: additionalDays ?? undefined,
-        clientSignatoryName: signatoryName || undefined,
-        clientSignatureData: approvalNotes || undefined,
+      const nextAgmt = await services.transaction(async repos => {
+        const storedRequest = await repos.scopeGuard.getRequestById(request.id);
+        if (!storedRequest || storedRequest.projectId !== activeProject.id) throw new ServiceError('not_found');
+        if (storedRequest.status === 'accepted') throw new ServiceError('conflict');
+        const next = await new KasunduanVaultService(repos.agreement).acceptScopeChange({
+          projectId: activeProject.id, currentAgreement: targetAgreement,
+          additionalDeliverables: additions, additionalFee: additionalFee ?? undefined,
+          additionalDays: additionalDays ?? undefined,
+          clientSignatoryName: signatoryName || undefined, clientSignatureData: approvalNotes || undefined,
+        });
+        await repos.scopeGuard.updateRequestStatus(request.id, 'accepted', new Date().toISOString());
+        return next;
       });
-
-      await services.repositories.scopeGuard.updateRequestStatus(
-        request.id,
-        'accepted',
-        new Date().toISOString(),
-      );
 
       setProjectAgreements((prev) => ({
         ...prev,
@@ -670,8 +656,20 @@ export function HomeScreen() {
       }));
       setSelectedAgreement(nextAgmt);
       await refreshProjectRequests(activeProject.id);
-    } catch {
-      // ignore
+    } catch (reason) {
+      throw reason instanceof ServiceError ? reason : new ServiceError('save_failed');
+    }
+  };
+
+  const handleResolveExclusionConflicts = async () => {
+    if (!services || !activeAgreement) throw new ServiceError('not_found');
+    try {
+      const next = await new KasunduanVaultService(services.repositories.agreement)
+        .resolveExclusionConflicts(activeProject.id, activeAgreement);
+      setProjectAgreements(previous => ({ ...previous, [activeProject.id]: [next, ...(previous[activeProject.id] || [])] }));
+      setSelectedAgreement(next);
+    } catch (reason) {
+      throw reason instanceof ServiceError ? reason : new ServiceError('save_failed');
     }
   };
 
@@ -713,15 +711,15 @@ export function HomeScreen() {
     }
   };
 
-  const handleReviewStoredRequest = (request: ClientRequest) => {
+  const handleReviewStoredRequest = async (request: ClientRequest) => {
     const matchedAnalysis = analysesMap[request.id];
-    if (matchedAnalysis) {
-      setAnalysis(matchedAnalysis);
-      const matchedProposal = proposalsMap[matchedAnalysis.id];
-      if (matchedProposal) {
-        setProposal(matchedProposal);
-      }
+    const matchedProposal = matchedAnalysis ? proposalsMap[matchedAnalysis.id] : null;
+    if (!matchedAnalysis || (!matchedProposal && matchedAnalysis.findings.some(f => f.classification === 'potential_additional'))) {
+      await handleAnalyzeRequest(request.rawText, request);
+      return;
     }
+    setAnalysis(matchedAnalysis);
+    setProposal(matchedProposal || null);
     navigateToSubScreen('review', 'forward');
   };
 
@@ -730,44 +728,16 @@ export function HomeScreen() {
     fee?: number | null,
     days?: number | null,
   ) => {
-    if (!services || !activeProject) return;
-    const targetAgreement = activeAgreement || activeAgreements[0];
-    if (!targetAgreement) return;
+    if (!services || !activeProject || !analysis) throw new ServiceError('not_found');
 
-    const additionsToInclude =
-      selectedItems && selectedItems.length > 0
-        ? selectedItems
-        : proposal?.selectedItems && proposal.selectedItems.length > 0
-        ? proposal.selectedItems
-        : ['Additional client requested deliverables'];
-
-    try {
-      const nextAgmt = await services.services.kasunduanVault.acceptScopeChange({
-        projectId: activeProject.id,
-        currentAgreement: targetAgreement,
-        additionalDeliverables: additionsToInclude,
-        additionalFee: fee ?? (proposal?.freelancerFeeEstimate ?? undefined),
-        additionalDays: days ?? (proposal?.freelancerDaysEstimate ?? undefined),
-      });
-
-      if (analysis?.requestId) {
-        await services.repositories.scopeGuard.updateRequestStatus(
-          analysis.requestId,
-          'accepted',
-          new Date().toISOString(),
-        );
-      }
-
-      setProjectAgreements((prev) => ({
-        ...prev,
-        [activeProject.id]: [nextAgmt, ...(prev[activeProject.id] || [])],
-      }));
-      setSelectedAgreement(nextAgmt);
-      await refreshProjectRequests(activeProject.id);
-      navigateToSubScreen('overview', 'backward');
-    } catch {
-      navigateToSubScreen('overview', 'backward');
-    }
+    if (proposal && proposal.analysisId !== analysis.id) throw new ServiceError('not_found');
+    const additionsToInclude = selectedItems ?? proposal?.selectedItems ?? [];
+    const request = await services.repositories.scopeGuard.getRequestById(analysis.requestId);
+    if (!request) throw new ServiceError('not_found');
+    await handleAcceptRequest(request, additionsToInclude,
+      fee === undefined ? proposal?.freelancerFeeEstimate ?? null : fee,
+      days === undefined ? proposal?.freelancerDaysEstimate ?? null : days);
+    navigateToSubScreen('overview', 'backward');
   };
 
   const handleDataReset = async () => {
@@ -865,6 +835,7 @@ export function HomeScreen() {
               onNavigateToNewRequest={() => navigateToSubScreen('new_request', 'forward')}
               onReviewRequest={handleReviewStoredRequest}
               onAcceptRequest={handleAcceptRequest}
+              onResolveExclusionConflicts={handleResolveExclusionConflicts}
               onRecordClientApproval={handleRecordClientApproval}
               onDeleteRequest={handleDeleteRequest}
               onDeleteProject={handleDeleteProject}

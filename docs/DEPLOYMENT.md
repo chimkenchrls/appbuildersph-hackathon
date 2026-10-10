@@ -250,3 +250,19 @@ Enterprise can restore any deployment that was previously live on the production
   export, and run the smoke checks.
 - Actions are pinned by commit SHA. Update the SHA and the version comment together.
 - Rotate `VERCEL_TOKEN` before it expires: create a new token, update the secret, revoke the old one.
+
+## Landing-page app screens
+
+The phone screens on the landing page are images in `public/app/`, rendered from the app's own
+screens with labelled demo data (react-native-web renders, not device captures). Regenerate them
+after a screen's layout or copy changes, and commit the result:
+
+```sh
+npm install --prefix /tmp/smoke playwright@1.64.0 && npx --prefix /tmp/smoke playwright install chromium
+SMOKE_MODULES=/tmp/smoke node scripts/capture-app-screens.mjs
+```
+
+The script exports a separate web build with `EXPO_PUBLIC_APP_SCREENSHOTS=1`, which enables the
+`/capture` route (`src/app/capture.tsx`) and keeps the mobile light palette on web. That build
+uses its own Metro cache, so it cannot affect a normal build. Converting to WebP needs
+`python3` with Pillow. The fixture data is in `src/screens/CaptureScreen.tsx`.

@@ -282,11 +282,16 @@ html, body { background: ${colors.background}; color-scheme: dark; }
 .lp-step-desc { min-height: 7.2em; padding-inline: 20px; }
 .lp-stage {
   grid-column: 7 / -1; align-self: stretch; display: grid; justify-items: center; align-content: center; gap: 20px;
-  min-height: 560px; padding: 48px 24px; border: 1px solid var(--line); border-right: 0;
-  background: radial-gradient(60% 55% at 50% 46%, color-mix(in srgb, var(--brand) 42%, var(--surface)), var(--surface) 78%);
-  margin-right: calc((100vw - min(100vw, var(--max) + 2 * var(--gutter))) / -2 - var(--gutter));
+  min-height: 560px;
 }
-.lp-stage-phone { zoom: 1.18; }
+.lp-stage-phone { display: grid; }
+.lp-stage-slide { grid-area: 1 / 1; justify-self: center; opacity: 0; visibility: hidden; transition: opacity 200ms ease, visibility 0s linear 200ms; }
+.lp-stage-slide[data-active='true'] { opacity: 1; visibility: visible; transition: opacity 220ms var(--ease-out); }
+.lp-stage-phone[data-instant] .lp-stage-slide { transition-duration: 0ms; }
+/* The bezel is the only chrome: a dark rim and rounded corners, with the screen's own pixels inside. */
+.lp-device { width: 250px; max-width: 100%; padding: 8px; border-radius: 38px; background: #05090A; border: 1px solid var(--line-strong); box-shadow: 0 24px 48px -24px rgba(0, 0, 0, 0.6); }
+.lp-device img { display: block; width: 100%; height: auto; border-radius: 30px; user-select: none; -webkit-user-drag: none; }
+.lp-phone .lp-device { width: 280px; }
 
 /* ---------- Your control ---------- */
 /* The one deep-teal field on the page: the mascot's own colour, under the page's strongest statement. */
@@ -302,11 +307,21 @@ html, body { background: ${colors.background}; color-scheme: dark; }
   user-select: none; pointer-events: none;
 }
 .lp[data-js] .lp-control:not([data-in]) .lp-control-mark { color: transparent; }
+.lp-control { --pb: clamp(84px, 10vw, 144px); }
 .lp-control .lp-wrap { position: relative; }
+/* Statements on the left; on the right a phone that rises out of the bottom of the band. */
+.lp-control-grid { display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; row-gap: 48px; }
+.lp-control-main { grid-column: 1 / span 7; }
+.lp-control-phone { grid-column: 9 / -1; align-self: end; display: flex; justify-content: center; height: 460px; overflow: hidden; margin-bottom: calc(-1 * var(--pb)); }
+.lp-control-phone .lp-device { width: 300px; align-self: flex-start; border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+.lp-control-phone .lp-device img { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+/* A cropped window onto part of an app screen. */
+.lp-snip { overflow: hidden; border-radius: 12px; background: #fff; border: 1px solid color-mix(in srgb, var(--on-brand) 30%, transparent); }
+.lp-snip img { display: block; width: 100%; height: auto; max-width: none; user-select: none; -webkit-user-drag: none; }
 .lp-statement { font-size: clamp(2.125rem, 5vw, 4.25rem); line-height: 1.02; font-weight: 560; letter-spacing: -0.038em; max-width: 14em; text-wrap: balance; }
 .lp-statement-body { margin-top: 20px; }
-.lp-pair { margin-top: clamp(56px, 7vw, 96px); display: grid; grid-template-columns: repeat(12, minmax(0, 1fr)); column-gap: 24px; row-gap: 40px; }
-.lp-pair > div { grid-column: span 4; display: grid; gap: 10px; align-content: start; padding-top: 18px; border-top: 1px solid color-mix(in srgb, var(--on-brand) 40%, transparent); }
+.lp-pair { margin-top: clamp(40px, 5vw, 72px); display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; row-gap: 40px; }
+.lp-pair > div { display: grid; gap: 10px; align-content: start; }
 
 /* ---------- Closing and footer ---------- */
 /* The mint field returns once, so the page opens and closes on the brand colour. */
@@ -375,6 +390,9 @@ html, body { background: ${colors.background}; color-scheme: dark; }
 /* The release note sits under Kwagi, set apart by a rule. */
 .lp-about-note { display: grid; gap: 6px; width: min(100%, 44rem); padding-top: 20px; border-top: 1px solid color-mix(in srgb, var(--on-mint) 30%, transparent); }
 .lp-about-note .lp-body { max-width: none; }
+.lp-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; margin-block: 12px 8px; }
+.lp-facts > div { display: grid; gap: 4px; align-content: start; }
+.lp-fact-title { margin: 0; font-size: 1.0625rem; font-weight: 600; letter-spacing: -0.01em; }
 .lp-band .lp-body { color: color-mix(in srgb, var(--on-mint) 82%, transparent); }
 /* On mint, the focus ring switches to the dark ink so it stays visible. */
 .lp-band :focus-visible { outline-color: var(--on-mint); }
@@ -405,10 +423,11 @@ html, body { background: ${colors.background}; color-scheme: dark; }
   .lp-bubble { left: 4px; max-width: calc(100% - 64px); font-size: 0.875rem; }
   .lp-bubble, .lp-file-row span { overflow: hidden; text-overflow: ellipsis; }
   .lp-demo { grid-template-columns: minmax(0, 1fr); }
-  .lp-stage { margin-right: calc(-1 * var(--gutter)); margin-left: calc(-1 * var(--gutter)); border-left: 0; min-height: 0; }
-  .lp-stage-phone { zoom: 1; }
+  .lp-stage { min-height: 0; }
   .lp-step-desc { min-height: 0; }
-  .lp-pair > div { grid-column: 1 / -1; }
+  .lp-control-main, .lp-control-phone { grid-column: 1 / -1; }
+  .lp-control-phone { height: 380px; }
+  .lp-pair, .lp-facts { grid-template-columns: minmax(0, 1fr); }
   /* No room to glide: he stays centred, the bubble opens under him, and the hint moves below it. */
   .lp-says { flex-direction: column; align-items: center; gap: 22px; }
   .lp-says-col { display: contents; }

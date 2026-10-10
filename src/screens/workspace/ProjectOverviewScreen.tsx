@@ -17,6 +17,8 @@ import { colors, radii, spacing, shadows } from '@/constants/theme';
 import { AppIcon } from '@/components/workspace/Icon';
 import { ShareService } from '@/services/domain/shareService';
 import { hapticSuccess, hapticImpactLight } from '@/utils/haptics';
+import { conflictingExclusions } from '@/safety/scopeExclusions';
+import { errorMessage } from '@/services/errors';
 import type {
   Project,
   Agreement,
@@ -37,7 +39,7 @@ interface ProjectOverviewScreenProps {
   onSelectProject: (projectId: string) => void;
   onSelectAgreementVersion: (agreement: Agreement) => void;
   onNavigateToNewRequest: () => void;
-  onReviewRequest?: (request: ClientRequest) => void;
+  onReviewRequest?: (request: ClientRequest) => void | Promise<void>;
   onAcceptRequest?: (
     request: ClientRequest,
     additions: string[],
@@ -51,6 +53,7 @@ interface ProjectOverviewScreenProps {
     signatoryName: string,
     signatureNotes?: string,
   ) => Promise<void> | void;
+  onResolveExclusionConflicts?: () => Promise<void>;
   onDeleteRequest?: (requestId: string) => Promise<void> | void;
   onDeleteProject?: (projectId: string) => Promise<void> | void;
   onBack: () => void;
@@ -191,6 +194,7 @@ export function ProjectOverviewScreen({
   onReviewRequest,
   onAcceptRequest,
   onRecordClientApproval,
+  onResolveExclusionConflicts,
   onDeleteRequest,
   onDeleteProject,
   onBack,
@@ -203,6 +207,9 @@ export function ProjectOverviewScreen({
   const [versionPickerOpen, setVersionPickerOpen] = useState(false);
   const [contractModalOpen, setContractModalOpen] = useState(false);
   const [shareFeedback, setShareFeedback] = useState<string | null>(null);
+  const [correctionOpen, setCorrectionOpen] = useState(false);
+  const [correcting, setCorrecting] = useState(false);
+  const [correctionError, setCorrectionError] = useState<string | null>(null);
 
   const handleConfirmDeleteProject = () => {
     if (Platform.OS === 'web') {
@@ -265,6 +272,19 @@ export function ProjectOverviewScreen({
   const activeAgreement = selectedAgreement || agreements[0] || null;
   const isLatest =
     agreements.length > 0 && activeAgreement?.id === agreements[0].id;
+  const exclusionConflicts = activeAgreement ? conflictingExclusions(activeAgreement) : [];
+
+  const confirmExclusionCorrection = async () => {
+    if (!onResolveExclusionConflicts || correcting) return;
+    setCorrecting(true);
+    setCorrectionError(null);
+    try {
+      await onResolveExclusionConflicts();
+      setCorrectionOpen(false);
+      await hapticSuccess();
+    } catch (reason) { setCorrectionError(errorMessage(reason)); }
+    finally { setCorrecting(false); }
+  };
 
   const handleOpenAcceptModal = (req: ClientRequest) => {
     setTargetRequest(req);
@@ -431,12 +451,11 @@ export function ProjectOverviewScreen({
   }, [activeAgreement, draftScope]);
 
   const displayExclusions = useMemo(() => {
+    // An empty confirmed list is authoritative; the original draft may still contain old exclusions.
     const rawExclusions: string[] =
-      activeAgreement?.exclusions?.length
+      activeAgreement
         ? activeAgreement.exclusions
-        : draftScope?.exclusions?.length
-          ? draftScope.exclusions
-          : [];
+        : draftScope?.exclusions ?? [];
 
     return rawExclusions.map((exc, idx) => {
       const excId = `EXC-${String(idx + 1).padStart(2, '0')}`;
@@ -795,7 +814,10 @@ export function ProjectOverviewScreen({
                                   styles.reviewRequestBtn,
                                   pressed && styles.reviewRequestBtnPressed,
                                 ]}
-                                onPress={() => onReviewRequest(req)}
+                                onPress={async () => {
+                                  try { await onReviewRequest(req); }
+                                  catch (reason) { Alert.alert('Could not review request', reason instanceof Error ? reason.message : errorMessage(reason)); }
+                                }}
                                 accessibilityRole="button"
                                 accessibilityLabel="Review request & proposal"
                               >
@@ -856,6 +878,20 @@ export function ProjectOverviewScreen({
 
         {/* Explicit Exclusions Section */}
         <Text style={styles.sectionTitle}>Explicit Exclusions</Text>
+        {exclusionConflicts.length > 0 && (
+          <View style={styles.groupCard}>
+            <Text style={styles.itemDescription} accessibilityRole="alert">
+              This version lists the same work as both included and excluded: {exclusionConflicts.join(', ')}.
+            </Text>
+            {isLatest && onResolveExclusionConflicts && (
+              <Pressable style={styles.primaryButton} accessibilityRole="button"
+                accessibilityLabel="Review conflicting exclusions"
+                onPress={() => { setCorrectionError(null); setCorrectionOpen(true); }}>
+                <Text style={styles.primaryButtonText}>Review exclusion correction</Text>
+              </Pressable>
+            )}
+          </View>
+        )}
         <View style={styles.groupCard}>
           {displayExclusions.map((item, index) => (
             <React.Fragment key={item.id}>
@@ -932,6 +968,35 @@ export function ProjectOverviewScreen({
           </Pressable>
         )}
       </ScrollView>
+
+      <Modal visible={correctionOpen} transparent animationType="fade"
+        onRequestClose={() => { if (!correcting) setCorrectionOpen(false); }}>
+        <View style={styles.modalOverlay}>
+          <View style={[styles.modalDialog, { maxHeight: '90%' }]}>
+            <ScrollView>
+              <Text style={styles.approvalModalTitle}>Correct conflicting exclusions</Text>
+              <Text style={styles.approvalModalDesc}>
+                These deliverables are already included. Remove their exclusions in Agreement v{(activeAgreement?.versionNumber ?? 0) + 1}:
+              </Text>
+              <Text style={styles.itemDescription}>{exclusionConflicts.join('\n')}</Text>
+              <Text style={styles.approvalModalDesc}>
+                Fees, timeline and deliverables stay the same. Earlier versions stay in history. Record client approval separately for the corrected version.
+              </Text>
+              {correctionError && <Text style={styles.itemDescription} accessibilityRole="alert">{correctionError}</Text>}
+              <Pressable style={[styles.primaryButton, correcting && styles.buttonDisabled]}
+                accessibilityRole="button" accessibilityLabel="Confirm exclusion correction"
+                disabled={correcting} onPress={() => void confirmExclusionCorrection()}>
+                <Text style={styles.primaryButtonText}>{correcting ? 'Saving correction...' : `Confirm correction as Agreement v${(activeAgreement?.versionNumber ?? 0) + 1}`}</Text>
+              </Pressable>
+              <Pressable style={styles.dialogCancelBtn} accessibilityRole="button"
+                accessibilityLabel="Cancel exclusion correction" disabled={correcting}
+                onPress={() => setCorrectionOpen(false)}>
+                <Text style={styles.dialogCancelBtnText}>Cancel</Text>
+              </Pressable>
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
 
       {/* Version History Picker Modal */}
       <Modal

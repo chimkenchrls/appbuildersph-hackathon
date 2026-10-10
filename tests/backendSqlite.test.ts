@@ -20,6 +20,7 @@ import { createBackendData } from '@/services/backend/backendData';
 import type { BackendPorts } from '@/services/backend/ports';
 import { BriefCraftService } from '@/services/domain/briefCraftService';
 import { KasunduanVaultService } from '@/services/domain/kasunduanVaultService';
+import { ContractGeneratorService } from '@/services/domain/contractGeneratorService';
 import { createWorkflows } from '@/services/workflows';
 import { validateFindings } from '@/safety/validateFindings';
 import { getDatabaseAsync } from '@/database/client';
@@ -472,6 +473,34 @@ const reviewedDraft = (projectId: string) => ({
     } finally { await source.db.closeAsync(); await target.closeAsync(); }
   });
 
+  test.each([true, false])('extracted drafts persist and restore with AI provenance %s', async extractedWithAi => {
+    const source = await realBackend(engine(JSON.stringify({
+      title: 'Kape Luna Website', deliverables: [{ title: 'One-page café website', description: 'Menu, hours, location and Messenger link' }],
+      budget: { amount: 18000, currency: 'PHP' }, timeline: { duration_days: 14 }, revision_terms: 'Two rounds of revisions',
+      exclusions: ['Online ordering', 'Payments'],
+    })));
+    const target = openDatabase();
+    try {
+      await migrateAsync(target);
+      const conversation = 'Build a café website for ₱18,000 within 14 days. Include two rounds of revisions.';
+      const draft = extractedWithAi ? await source.ports.briefCraft.extractBrief(conversation)
+        : new BriefCraftService(engine('{}')).extractBriefHeuristic(conversation, 'Kape Luna Website');
+      expect(draft).toMatchObject({ sourceConversation: conversation, extractedWithAi });
+      const repo = new ProjectRepository(source.db);
+      const project = await repo.create({ id: 'extracted-draft', title: draft.title, draftScopeJson: JSON.stringify(draft) });
+      expect(JSON.parse((await repo.getById(project.id))!.draftScopeJson!)).toEqual(draft);
+      const edited = { ...draft, budgetAmount: 20000 };
+      await repo.update(project.id, { draftScopeJson: JSON.stringify(edited) });
+      expect(JSON.parse((await repo.list()).find(row => row.id === project.id)!.draftScopeJson!)).toEqual(edited);
+      for (const invalid of [{ ...edited, extractedWithAi: 'true' }, { ...edited, sourceConversation: 'x'.repeat(15001) }, { ...edited, unexpected: true }]) {
+        await expect(repo.update(project.id, { draftScopeJson: JSON.stringify(invalid) })).rejects.toThrow();
+      }
+      const backup = await new ExportService(source.db).exportProject(project.id);
+      await new ExportService(target).importProject(backup);
+      expect(JSON.parse((await new ProjectRepository(target).getById(project.id))!.draftScopeJson!)).toEqual(edited);
+    } finally { await source.db.closeAsync(); await target.closeAsync(); }
+  });
+
   test('migration failure rolls back schema changes without deleting user records', async () => {
     const db = openDatabase(); await initial.up(db); await tax.up(db);
     await db.execAsync("INSERT INTO projects (id, title, created_at, updated_at) VALUES ('keep', 'Keep', '2026-10-09T00:00:00.000Z', '2026-10-09T00:00:00.000Z');");
@@ -510,12 +539,195 @@ const reviewedDraft = (projectId: string) => ({
 });
 
 (nodeSqlite ? describe : describe.skip)('alternate backend writers', () => {
+  test('accepted deliverables supersede matching exclusions in each new version', async () => {
+    const { db } = await realBackend(engine('{}'));
+    try {
+      const repo = new AgreementRepository(db);
+      const vault = new KasunduanVaultService(repo);
+      const template = (await repo.getById('agmt_demo_v1_01'))!;
+      const project = await new ProjectRepository(db).create({ id: 'cafe-exclusions', title: 'Kape Luna' });
+      const created = await vault.confirmScope(project.id, { ...template,
+        exclusions: ['online ordering', 'payments', 'hosting fees'] });
+      const first = (await repo.getById(created.id))!;
+      const accepted = await vault.acceptScopeChange({ projectId: project.id, currentAgreement: first,
+        additionalDeliverables: ['add online ordering'] });
+      const second = (await repo.getById(accepted.id))!;
+      expect(second.exclusions).toEqual(['payments', 'hosting fees']);
+      const third = await vault.acceptScopeChange({ projectId: project.id, currentAgreement: second,
+        additionalDeliverables: ['Payments'] });
+      expect(third.exclusions).toEqual(['hosting fees']);
+      expect(await repo.getById(first.id)).toEqual(first);
+      expect(await repo.getById(second.id)).toEqual(second);
+      expect((await repo.getLatestByProjectId(project.id))?.exclusions).toEqual(['hosting fees']);
+      const html = ContractGeneratorService.generateContractHtml(third);
+      expect(html).toContain('<li>hosting fees</li>');
+      expect(html).not.toContain('<li>online ordering</li>');
+      expect(html).not.toContain('<li>payments</li>');
+    } finally { await db.closeAsync(); }
+  });
+
+  test('a confirmed correction repairs existing conflicts as a new version without rewriting signed history', async () => {
+    const { db } = await realBackend(engine('{}'));
+    try {
+      const repo = new AgreementRepository(db);
+      const vault = new KasunduanVaultService(repo);
+      const first = (await repo.getById('agmt_demo_v1_01'))!;
+      const second = await repo.createRevision({ ...first, id: 'old-v2', versionNumber: 2,
+        requirements: [...first.requirements, { id: 'REQ-04', title: 'add online ordering', description: '', category: 'deliverable' }],
+        exclusions: ['online ordering', 'payments', 'hosting fees'] }, first.id);
+      const third = await repo.createRevision({ ...second, id: 'old-v3', versionNumber: 3,
+        requirements: [...second.requirements, { id: 'REQ-05', title: 'payments', description: '', category: 'deliverable' }],
+        clientApprovedAt: '2026-10-10T00:00:00.000Z', clientSignatoryName: 'Mara', clientSignatureData: 'Signed v3' }, second.id);
+      await db.execAsync("CREATE TRIGGER fail_correction BEFORE INSERT ON requirements BEGIN SELECT RAISE(ABORT, 'disk failure'); END;");
+      await expect(vault.resolveExclusionConflicts(first.projectId, third)).rejects.toThrow('disk failure');
+      expect(await repo.getLatestByProjectId(first.projectId)).toEqual(third);
+      await db.execAsync('DROP TRIGGER fail_correction');
+      const corrected = await vault.resolveExclusionConflicts(first.projectId, third);
+      expect(corrected).toMatchObject({ versionNumber: 4, exclusions: ['hosting fees'], requirements: third.requirements,
+        budgetAmount: third.budgetAmount, durationDays: third.durationDays, revisionTerms: third.revisionTerms,
+        clientApprovedAt: null, clientSignatoryName: null, clientSignatureData: null });
+      expect(await repo.getById(first.id)).toEqual(first);
+      expect(await repo.getById(second.id)).toEqual(second);
+      expect(await repo.getById(third.id)).toEqual(third);
+      await expect(vault.resolveExclusionConflicts(first.projectId, third)).rejects.toMatchObject({ code: 'conflict' });
+      await expect(vault.resolveExclusionConflicts(first.projectId, corrected)).rejects.toMatchObject({ code: 'invalid_input' });
+      const backup = JSON.parse(await new ExportService(db).exportProject(first.projectId));
+      expect(backup.agreements.find((a: { id: string }) => a.id === corrected.id).exclusions).toEqual(['hosting fees']);
+      expect(backup.agreements.find((a: { id: string }) => a.id === third.id).exclusions).toEqual(third.exclusions);
+
+      const fifth = await vault.acceptScopeChange({ projectId: first.projectId, currentAgreement: corrected,
+        additionalDeliverables: ['hosting fees'] });
+      expect(fifth).toMatchObject({ versionNumber: 5, exclusions: [] });
+      expect((await repo.getById(fifth.id))?.exclusions).toEqual([]);
+      expect((await db.getFirstAsync<{ exclusions_json: string }>('SELECT exclusions_json FROM agreements WHERE id = ?', [fifth.id]))?.exclusions_json).toBe('[]');
+      expect(await repo.getById(corrected.id)).toEqual(corrected);
+      const fifthBackup = await new ExportService(db).exportProject(first.projectId);
+      const dir = mkdtempSync(join(tmpdir(), 'owlset-empty-exclusions-'));
+      const path = join(dir, 'owlset.db');
+      let restored = openDatabase(path);
+      try {
+        await migrateAsync(restored);
+        await new ExportService(restored).importProject(fifthBackup);
+        await restored.closeAsync();
+        restored = openDatabase(path);
+        await migrateAsync(restored);
+        const latest = (await new AgreementRepository(restored).getLatestByProjectId(first.projectId))!;
+        expect(latest).toMatchObject({ id: fifth.id, versionNumber: 5, exclusions: [] });
+        const html = ContractGeneratorService.generateContractHtml(latest);
+        expect(html).not.toContain('<li>hosting fees</li>');
+        expect(html).not.toContain('<li>online ordering</li>');
+        expect(html).not.toContain('<li>payments</li>');
+      } finally { await restored.closeAsync(); rmSync(dir, { recursive: true, force: true }); }
+    } finally { await db.closeAsync(); }
+  });
+
+  test('accepting scope changes seals v2 and v3 without changing previous agreements', async () => {
+    const { db, ports } = await realBackend(engine('{}'));
+    try {
+      const repo = new AgreementRepository(db);
+      const vault = new KasunduanVaultService(repo);
+      const original = (await repo.getById('agmt_demo_v1_01'))!;
+      const second = await vault.acceptScopeChange({ projectId: original.projectId, currentAgreement: original,
+        additionalDeliverables: ['Online ordering'], additionalFee: 7000, additionalDays: 5,
+        clientSignatoryName: 'Mara Santos', clientSignatureData: 'Agreed by phone' });
+      expect(second).toMatchObject({ versionNumber: 2, budgetAmount: original.budgetAmount! + 7000,
+        durationDays: original.durationDays! + 5, clientSignatoryName: 'Mara Santos', clientSignatureData: 'Agreed by phone' });
+      expect(second.clientApprovedAt).toBeTruthy();
+      expect(second.requirements).toEqual(expect.arrayContaining(original.requirements));
+      expect(second.requirements.at(-1)?.title).toBe('Online ordering');
+      const third = await vault.acceptScopeChange({ projectId: original.projectId, currentAgreement: second,
+        additionalDeliverables: ['Staff dashboard'], additionalFee: 0, additionalDays: 0 });
+      expect(third).toMatchObject({ versionNumber: 3, budgetAmount: second.budgetAmount, durationDays: second.durationDays });
+      expect(third.requirements).toEqual(expect.arrayContaining(second.requirements));
+      expect(third.clientApprovedAt ?? null).toBeNull();
+      expect(await repo.getById(original.id)).toEqual(original);
+      expect(await repo.getById(second.id)).toMatchObject(second);
+      expect((await repo.listByProjectId(original.projectId)).map(a => a.versionNumber)).toEqual([3, 2, 1]);
+      await expect(vault.acceptScopeChange({ projectId: original.projectId, currentAgreement: original,
+        additionalDeliverables: ['Stale change'] })).rejects.toMatchObject({ code: 'conflict' });
+      expect(await repo.listByProjectId(original.projectId)).toHaveLength(3);
+    } finally { await db.closeAsync(); }
+  });
+
+  test('competing scope acceptances cannot fork the same agreement version', async () => {
+    const { db } = await realBackend(engine('{}'));
+    try {
+      const repo = new AgreementRepository(db);
+      const vault = new KasunduanVaultService(repo);
+      const original = (await repo.getById('agmt_demo_v1_01'))!;
+      const results = await Promise.allSettled(['Booking', 'Dashboard'].map(item => vault.acceptScopeChange({
+        projectId: original.projectId, currentAgreement: original, additionalDeliverables: [item],
+      })));
+      expect(results.filter(result => result.status === 'fulfilled')).toHaveLength(1);
+      expect((await repo.listByProjectId(original.projectId)).map(a => a.versionNumber)).toEqual([2, 1]);
+      expect(await repo.getById(original.id)).toEqual(original);
+    } finally { await db.closeAsync(); }
+  });
+
+  test('failed request acceptance rolls back the new version and keeps the request retryable', async () => {
+    const { db } = await realBackend(engine('{}'));
+    try {
+      const original = (await new AgreementRepository(db).getById('agmt_demo_v1_01'))!;
+      const before = await new ScopeGuardRepository(db).getRequestById('req_demo_request_01');
+      await db.execAsync("CREATE TRIGGER fail_accept BEFORE UPDATE ON client_requests BEGIN SELECT RAISE(ABORT, 'disk failure'); END;");
+      const accept = () => transaction(db, async tx => {
+        const repos = repositories(tx, true);
+        const next = await new KasunduanVaultService(repos.agreement).acceptScopeChange({
+          projectId: original.projectId, currentAgreement: original, additionalDeliverables: ['Ordering'],
+          clientSignatoryName: 'Mara Santos',
+        });
+        await repos.scopeGuard.updateRequestStatus(before!.id, 'accepted', next.confirmedAt);
+        return next;
+      });
+      await expect(accept()).rejects.toThrow('disk failure');
+      expect(await new AgreementRepository(db).listByProjectId(original.projectId)).toEqual([original]);
+      expect(await new ScopeGuardRepository(db).getRequestById(before!.id)).toEqual(before);
+      await db.execAsync('DROP TRIGGER fail_accept');
+      expect(await accept()).toMatchObject({ versionNumber: 2, clientSignatoryName: 'Mara Santos' });
+      expect(await new ScopeGuardRepository(db).getRequestById(before!.id)).toMatchObject({ status: 'accepted' });
+    } finally { await db.closeAsync(); }
+  });
+
   test('vault confirmation cannot create Agreement v2 on a repeated call', async () => {
     const { ports } = await realBackend(engine('{}'));
     const agreement = await ports.agreements.getById('agmt_demo_v1_01');
     const vault = new KasunduanVaultService(ports.agreements as AgreementRepository);
     await expect(vault.confirmScope(agreement!.projectId, agreement!)).rejects.toThrow();
     expect(await (ports.agreements as AgreementRepository).listByProjectId(agreement!.projectId)).toHaveLength(1);
+  });
+
+  test('plain requests persist in SQLite without inference or analysis records', async () => {
+    const generate = jest.fn(async () => { throw new Error('AI unavailable'); });
+    const { db, ports } = await realBackend({ isAvailable: async () => false, generate });
+    try {
+      const service = new ScopeGuardService(ports.engine, ports.agreements as AgreementRepository, ports.scopeGuard as ScopeGuardRepository);
+      const saved = await service.saveRequest({ projectId: 'proj_demo_website_01', agreementId: 'agmt_demo_v1_01', requestText: '  Add a gallery  ' });
+      const reopenedRepository = new ScopeGuardRepository(db);
+      expect(await reopenedRepository.getRequestById(saved.id)).toEqual({ ...saved, acceptedAt: null });
+      expect(await reopenedRepository.listRequestsByProjectId(saved.projectId)).toContainEqual({ ...saved, acceptedAt: null });
+      expect(await reopenedRepository.getAnalysisByRequestId(saved.id)).toBeNull();
+      expect(generate).not.toHaveBeenCalled();
+      await expect(service.saveRequest({ projectId: 'other-project', agreementId: saved.agreementId, requestText: 'Add booking' })).rejects.toMatchObject({ code: 'not_found' });
+      await expect(service.saveRequest({ projectId: saved.projectId, agreementId: saved.agreementId, requestText: '   ' })).rejects.toMatchObject({ code: 'invalid_input' });
+    } finally { await db.closeAsync(); }
+  });
+
+  test('analysis of a stored request keeps its SQLite identity and never duplicates the message', async () => {
+    const { db, ports } = await realBackend(engine(JSON.stringify({ overall_classification: 'potential_additional', summary: 'New work',
+      findings: [{ item: 'Gallery', classification: 'potential_additional', explanation: 'New work', evidence_requirement_ids: [] }], clarification_questions: [] })));
+    try {
+      const service = new ScopeGuardService(ports.engine, ports.agreements as AgreementRepository, ports.scopeGuard as ScopeGuardRepository);
+      const saved = await service.saveRequest({ projectId: 'proj_demo_website_01', agreementId: 'agmt_demo_v1_01', requestText: 'Add a gallery' });
+      const before = await service.listRequests(saved.projectId);
+      const options = { projectId: saved.projectId, agreementId: saved.agreementId, requestId: saved.id, requestText: saved.rawText };
+      const analysis = await service.analyzeRequest(options);
+      expect(analysis.requestId).toBe(saved.id);
+      expect(await service.listRequests(saved.projectId)).toEqual(before);
+      expect(await new ScopeGuardRepository(db).getAnalysisByRequestId(saved.id)).toEqual(analysis);
+      await expect(service.analyzeRequest({ ...options, requestText: 'Different request' })).rejects.toMatchObject({ code: 'not_found' });
+      await new ScopeGuardRepository(db).updateRequestStatus(saved.id, 'accepted', new Date().toISOString());
+      await expect(service.analyzeRequest(options)).rejects.toMatchObject({ code: 'conflict' });
+    } finally { await db.closeAsync(); }
   });
 
   test('legacy analysis service rolls back its request when analysis persistence fails', async () => {
@@ -571,5 +783,95 @@ const reviewedDraft = (projectId: string) => ({
       })).rejects.toMatchObject({ code: 'data_integrity' });
       expect(await db.getFirstAsync("SELECT id FROM agreements WHERE id = 'orphan'")).toBeNull();
     } finally { await db.closeAsync(); rmSync(dir, { recursive: true, force: true }); }
+  });
+});
+
+(nodeSqlite ? describe : describe.skip)('database audit regressions', () => {
+  test('failed project deletion preserves complete history for retry', async () => {
+    const { db } = await realBackend(engine('{}'));
+    try {
+      const exports = new ExportService(db);
+      const before = JSON.parse(await exports.exportProject('proj_demo_website_01'));
+      await db.execAsync("CREATE TRIGGER fail_project_delete BEFORE DELETE ON projects BEGIN SELECT RAISE(ABORT, 'disk failure'); END;");
+      await expect(new ProjectRepository(db).delete('proj_demo_website_01')).rejects.toThrow('disk failure');
+      const after = JSON.parse(await exports.exportProject('proj_demo_website_01'));
+      expect({ ...after, exportedAt: before.exportedAt }).toEqual(before);
+    } finally { await db.closeAsync(); }
+  });
+
+  test('project deletion cleans its own draft and source settings on an isolated connection', async () => {
+    const source = await realBackend(engine('{}'));
+    const backup = await new ExportService(source.db).exportProject('proj_demo_website_01');
+    const dir = mkdtempSync(join(tmpdir(), 'owlset-delete-'));
+    const db = openDatabase(join(dir, 'owlset.db'));
+    try {
+      await migrateAsync(db);
+      await new ExportService(db).importProject(backup);
+      const settings = new SettingsRepository(db);
+      await settings.set('saklaw_source:proj_demo_website_01', 'Private conversation');
+      await settings.set('saklaw_scope_draft:proj_demo_website_01', 'Old draft');
+      await settings.set('saklaw_source:other-project', 'Keep me');
+      await settings.set('freelancer_name', 'Alex');
+      const projects = new ProjectRepository(db);
+      await projects.create({ id: 'other-project', title: 'Another project' });
+      expect(await projects.delete('proj_demo_website_01')).toBe(true);
+      expect(await settings.get('saklaw_source:proj_demo_website_01')).toBeNull();
+      expect(await settings.get('saklaw_scope_draft:proj_demo_website_01')).toBeNull();
+      expect(await settings.get('saklaw_source:other-project')).toBe('Keep me');
+      expect(await settings.get('freelancer_name')).toBe('Alex');
+      expect((await projects.list()).map(row => row.id)).toEqual(['other-project']);
+      expect(await db.getAllAsync('PRAGMA foreign_key_check')).toEqual([]);
+      expect(await projects.delete('proj_demo_website_01')).toBe(false);
+    } finally { await source.db.closeAsync(); await db.closeAsync(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('request deletion removes dependent analyses and proposals atomically on an isolated connection', async () => {
+    const source = await realBackend(engine('{}'));
+    const backup = await new ExportService(source.db).exportProject('proj_demo_website_01');
+    const dir = mkdtempSync(join(tmpdir(), 'owlset-request-delete-'));
+    const db = openDatabase(join(dir, 'owlset.db'));
+    try {
+      await migrateAsync(db);
+      await new ExportService(db).importProject(backup);
+      const requests = new ScopeGuardRepository(db);
+      const proposals = new ProposalRepository(db);
+      await db.execAsync("CREATE TRIGGER fail_request_delete BEFORE DELETE ON client_requests BEGIN SELECT RAISE(ABORT, 'disk failure'); END;");
+      await expect(requests.deleteRequest('req_demo_request_01')).rejects.toThrow('disk failure');
+      expect(await proposals.getById('prop_demo_proposal_01')).not.toBeNull();
+      expect(await requests.getAnalysisById('ana_demo_analysis_01')).not.toBeNull();
+      await db.execAsync('DROP TRIGGER fail_request_delete');
+      await requests.deleteRequest('req_demo_request_01');
+      expect(await requests.getRequestById('req_demo_request_01')).toBeNull();
+      expect(await requests.getAnalysisById('ana_demo_analysis_01')).toBeNull();
+      expect(await proposals.getById('prop_demo_proposal_01')).toBeNull();
+      expect(await new AgreementRepository(db).getById('agmt_demo_v1_01')).not.toBeNull();
+      expect(await new ProjectRepository(db).getById('proj_demo_website_01')).not.toBeNull();
+      expect(await db.getAllAsync('PRAGMA foreign_key_check')).toEqual([]);
+    } finally { await source.db.closeAsync(); await db.closeAsync(); rmSync(dir, { recursive: true, force: true }); }
+  });
+
+  test('invalid client approval cannot make a confirmed agreement unreadable', async () => {
+    const { db } = await realBackend(engine('{}'));
+    try {
+      const repo = new AgreementRepository(db);
+      const original = await repo.getById('agmt_demo_v1_01');
+      await expect(repo.recordClientApproval('agmt_demo_v1_01', 'x'.repeat(2001))).rejects.toMatchObject({ code: 'invalid_input' });
+      await expect(repo.recordClientApproval('agmt_demo_v1_01', '   ')).rejects.toMatchObject({ code: 'invalid_input' });
+      await expect(repo.recordClientApproval('agmt_demo_v1_01', 'Alex', 'x'.repeat(2000001))).rejects.toMatchObject({ code: 'invalid_input' });
+      expect(await repo.getById('agmt_demo_v1_01')).toEqual(original);
+      await expect(repo.recordClientApproval('missing', 'Alex')).rejects.toMatchObject({ code: 'not_found' });
+    } finally { await db.closeAsync(); }
+  });
+
+  test('invalid request status cannot poison saved request history', async () => {
+    const { db } = await realBackend(engine('{}'));
+    try {
+      const repo = new ScopeGuardRepository(db);
+      const original = await repo.getRequestById('req_demo_request_01');
+      await expect(repo.updateRequestStatus('req_demo_request_01', 'invalid' as 'accepted')).rejects.toMatchObject({ code: 'invalid_input' });
+      await expect(repo.updateRequestStatus('req_demo_request_01', 'accepted', 'yesterday')).rejects.toMatchObject({ code: 'invalid_input' });
+      expect(await repo.getRequestById('req_demo_request_01')).toEqual(original);
+      await expect(repo.updateRequestStatus('missing', 'analyzed')).rejects.toMatchObject({ code: 'not_found' });
+    } finally { await db.closeAsync(); }
   });
 });

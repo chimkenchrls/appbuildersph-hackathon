@@ -1,4 +1,4 @@
-import { LLMEngineUnavailableError, LLMGenerationTimeoutError, LLMParseError } from '@/llm/contracts';
+import { LLMContextOverflowError, LLMEngineUnavailableError, LLMGenerationTimeoutError, LLMParseError } from '@/llm/contracts';
 import { parseAndValidateJson } from '@/llm/jsonParser';
 import { buildChangeDeskPrompt } from '@/llm/prompts/changeDeskPrompt';
 import { buildScopeGuardPrompt } from '@/llm/prompts/scopeGuardPrompt';
@@ -43,6 +43,7 @@ export function createBackendAi(getPorts: () => Promise<BackendPorts>): SaklawAi
 
   function toAiError(error: unknown): ServiceError {
     if (error instanceof ServiceError) return error;
+    if (error instanceof LLMContextOverflowError) return new ServiceError('input_too_long', error.message);
     if (error instanceof LLMGenerationTimeoutError) return new ServiceError('generation_timeout', error.message);
     if (error instanceof LLMEngineUnavailableError) { setAvailable(false); return new ServiceError('model_unavailable', error.message); }
     if (error instanceof LLMParseError) return new ServiceError('invalid_output', error.message);
@@ -60,6 +61,8 @@ export function createBackendAi(getPorts: () => Promise<BackendPorts>): SaklawAi
     let ports: BackendPorts;
     try { ports = await getPorts(); } catch (error) { throw toAiError(error); }
     checkCancelled(signal);
+    // Another caller may have acquired the engine while initialization was awaited.
+    if (running > 0) throw new ServiceError('model_unavailable');
     running += 1; emit();
     const task = work(ports);
     void task.then(() => setAvailable(true), () => {}).finally(() => { running -= 1; emit(); });

@@ -4,6 +4,9 @@ import Svg, { Path } from 'react-native-svg';
 import { colors } from '@/constants/theme';
 
 export type IconName =
+  | 'cpu'
+  | 'zap'
+  | 'wifi'
   | 'projects'
   | 'agreements'
   | 'settings'
@@ -47,6 +50,12 @@ interface IconProps {
 
 export function AppIcon({ name, size = 20, color = colors.textPrimary }: IconProps) {
   switch (name) {
+    case 'cpu':
+      return <Lucide name="cpu" size={size} color={color} />;
+    case 'zap':
+      return <Lucide name="zap" size={size} color={color} />;
+    case 'wifi':
+      return <Lucide name="wifi" size={size} color={color} />;
     case 'x':
       return <Lucide name="x" size={size} color={color} />;
     case 'user':

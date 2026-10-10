@@ -28,6 +28,18 @@ export class LLMGenerationTimeoutError extends Error {
   }
 }
 
+/** The prompt, plus room for an answer, does not fit the model's context window. */
+export class LLMContextOverflowError extends Error {
+  constructor(
+    public readonly promptTokens: number,
+    public readonly limitTokens: number,
+    message = 'This input is too long for the on-device model.',
+  ) {
+    super(message);
+    this.name = 'LLMContextOverflowError';
+  }
+}
+
 export class LLMParseError extends Error {
   constructor(
     message: string,

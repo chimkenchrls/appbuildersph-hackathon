@@ -1,33 +1,33 @@
-import { useState, type CSSProperties, type MouseEvent, type ReactNode } from 'react';
+import { useState, type CSSProperties, type MouseEvent } from 'react';
 
-import { AgreementConcept, DraftConcept, ProposalConcept, ScopeGuardConcept } from './ConceptScreens';
+import { PhoneFrame, type AppScreen } from './PhoneFrame';
 
-const STEPS: { title: string; body: string; concept: ReactNode }[] = [
+const STEPS: { title: string; body: string; screen: AppScreen }[] = [
   {
     title: 'Paste the conversation',
     body: 'Paste the client messages you choose. OwlSet drafts the deliverables, budget, timeline and revision terms, and lists what was never settled. Every field stays editable.',
-    concept: <DraftConcept />,
+    screen: 'draft',
   },
   {
     title: 'Confirm Agreement v1',
     body: 'When the draft matches what was agreed, confirm it. That saves a fixed snapshot with an ID for each requirement. It records your review, not the client’s approval.',
-    concept: <AgreementConcept />,
+    screen: 'agreement',
   },
   {
     title: 'Check a new request',
     body: 'Enter what the client is asking for. Each item gets its own finding, and every finding points to the requirement it relies on.',
-    concept: <ScopeGuardConcept />,
+    screen: 'scopeguard',
   },
   {
     title: 'Draft the change proposal',
     body: 'Choose what to propose and enter your own fee and extra days. OwlSet helps word the message. You edit, save and copy it. Nothing is sent for you.',
-    concept: <ProposalConcept />,
+    screen: 'proposal',
   },
 ];
 
 /**
  * The four workflow steps. Choosing one slides the highlight to it and swaps the
- * description and concept screen. Rows keep a fixed height, so nothing reflows.
+ * description and app screen. Rows keep a fixed height, so nothing reflows.
  */
 export function StepTabs() {
   const [selected, setSelected] = useState(1);
@@ -61,10 +61,16 @@ export function StepTabs() {
       </div>
 
       <div className="lp-stage lp-st" style={{ '--i': 1 } as CSSProperties}>
-        <div key={selected} className="lp-swap lp-stage-phone" data-instant={instant ? '' : undefined}>
-          {STEPS[selected].concept}
+        {/* All four screens are in the page from the start and stacked in one cell, so choosing a
+            step only changes which one is visible. Nothing is fetched or remounted on a click. */}
+        <div className="lp-stage-phone" data-instant={instant ? '' : undefined}>
+          {STEPS.map((step, index) => (
+            <div key={step.screen} className="lp-stage-slide" data-active={index === selected} aria-hidden={index !== selected}>
+              <PhoneFrame screen={step.screen} eager />
+            </div>
+          ))}
         </div>
-        <p className="lp-fine">Concept mockup with demo data</p>
+        <p className="lp-fine">Screen from the app, with demo data</p>
       </div>
     </>
   );

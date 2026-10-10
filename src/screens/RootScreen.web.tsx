@@ -2,9 +2,9 @@ import Head from 'expo-router/head';
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore, type CSSProperties, type MouseEvent } from 'react';
 
 import { Mascot } from '@/components/kwagi/PageMascot';
-import { AgreementConcept, ScopeGuardConcept } from '@/components/landing/ConceptScreens';
 import { FileTheChat } from '@/components/landing/FileTheChat';
 import { KwagiSays } from '@/components/landing/KwagiSays';
+import { PhoneFrame, ScreenSnip } from '@/components/landing/PhoneFrame';
 import { ScopeDemo } from '@/components/landing/ScopeDemo';
 import { StepTabs } from '@/components/landing/StepTabs';
 import { LANDING_CSS } from '@/components/landing/styles';
@@ -216,13 +216,13 @@ export default function RootScreen() {
             </div>
           </div>
           <div className="lp-hero-visual">
-            {/* Two concept screens of the app stand behind Kwagi. They fade out toward his feet. */}
+            {/* Two screens of the app stand behind Kwagi. They fade out toward his feet. */}
             <div className="lp-phones">
               <div className="lp-phone lp-phone-a lp-rise" style={{ '--i': 5 } as CSSProperties}>
-                <AgreementConcept />
+                <PhoneFrame screen="agreement" eager />
               </div>
               <div className="lp-phone lp-phone-b lp-rise" style={{ '--i': 6 } as CSSProperties}>
-                <ScopeGuardConcept />
+                <PhoneFrame screen="scopeguard" eager />
               </div>
             </div>
             <div className="lp-kwagi lp-rise" style={{ '--i': 7 } as CSSProperties}>
@@ -234,7 +234,7 @@ export default function RootScreen() {
               />
             </div>
             <p className="lp-hero-note">
-              This is Kwagi. Move your cursor around him, or click. Behind him are concept mockups with demo data.
+              This is Kwagi. Move your cursor around him, or click. Behind him are screens from the app, with demo data.
             </p>
           </div>
         </section>
@@ -277,8 +277,8 @@ export default function RootScreen() {
             <div className="lp-stack">
               <h2 className="lp-h2">How it works</h2>
               <p className="lp-body">
-                Four steps, from the first conversation to a change proposal. The app is still being built, so the
-                screens here are concepts.
+                Four steps, from the first conversation to a change proposal. The app is still being built. The
+                screens here come from its current build, with demo data.
               </p>
             </div>
             <div className="lp-grid">
@@ -291,25 +291,42 @@ export default function RootScreen() {
           <span className="lp-control-mark" aria-hidden>
             R1
           </span>
-          <div className="lp-wrap">
-            <h2 className="lp-statement">You confirm, not the AI.</h2>
-            <p className="lp-body lp-statement-body">
-              Suggestions are labelled as suggestions. Nothing becomes part of an agreement until you confirm it.
-            </p>
-            <div className="lp-pair">
-              <div className="lp-st">
-                <h3 className="lp-h3">Evidence, not verdicts.</h3>
-                <p className="lp-body">
-                  A finding shows the recorded clause behind it. Something missing from the scope is shown as missing,
-                  never as a rule the client broke.
-                </p>
+          <div className="lp-wrap lp-control-grid">
+            <div className="lp-control-main">
+              <h2 className="lp-statement">You confirm, not the AI.</h2>
+              <p className="lp-body lp-statement-body">
+                Suggestions are labelled as suggestions. Nothing becomes part of an agreement until you confirm it.
+              </p>
+              <div className="lp-pair">
+                <div className="lp-st">
+                  <ScreenSnip
+                    screen="scopeguard"
+                    top={0.255}
+                    height={140}
+                    alt="A potential addition in the app: customer accounts with login, with a link to the scope evidence, requirements R1 and R2."
+                  />
+                  <h3 className="lp-h3">Evidence, not verdicts.</h3>
+                  <p className="lp-body">
+                    A finding shows the recorded clause behind it. Something missing from the scope is shown as missing,
+                    never as a rule the client broke.
+                  </p>
+                </div>
+                <div className="lp-st" style={{ '--i': 1 } as CSSProperties}>
+                  <ScreenSnip
+                    screen="proposal"
+                    top={0.358}
+                    height={84}
+                    alt="The app’s fee and extra working days fields, filled in by the freelancer, with the note that OwlSet does not set your rates."
+                  />
+                  <h3 className="lp-h3">Your numbers.</h3>
+                  <p className="lp-body">
+                    OwlSet does not suggest prices or deadlines. Fees and extra days are whatever you type.
+                  </p>
+                </div>
               </div>
-              <div className="lp-st" style={{ '--i': 1 } as CSSProperties}>
-                <h3 className="lp-h3">Your numbers.</h3>
-                <p className="lp-body">
-                  OwlSet does not suggest prices or deadlines. Fees and extra days are whatever you type.
-                </p>
-              </div>
+            </div>
+            <div className="lp-control-phone lp-st" style={{ '--i': 2 } as CSSProperties}>
+              <PhoneFrame screen="scopeguard" />
             </div>
           </div>
         </section>
@@ -320,6 +337,16 @@ export default function RootScreen() {
             <KwagiSays size={narrow ? 150 : 220} />
             <div className="lp-about-note">
               <h3 className="lp-h3">Android app</h3>
+              <div className="lp-facts">
+                <div>
+                  <h4 className="lp-fact-title">Saved on your phone</h4>
+                  <p className="lp-body">Projects, agreements and proposals are stored on the device.</p>
+                </div>
+                <div>
+                  <h4 className="lp-fact-title">Android first</h4>
+                  <p className="lp-body">An installable APK. There is no store listing yet.</p>
+                </div>
+              </div>
               <p className="lp-body">OwlSet is in development. A download will be listed here when a release is available.</p>
             </div>
           </div>

@@ -144,7 +144,7 @@ export class LMStudioAdapter implements LLMEngine {
           messages,
           temperature: options.temperature ?? 0.1,
           max_tokens: options.maxTokens ?? 1024,
-          // Saklaw needs the final structured answer within its token/time budget.
+          // OwlSet needs the final structured answer within its token/time budget.
           reasoning_effort: 'none',
         }),
         signal: controller.signal,

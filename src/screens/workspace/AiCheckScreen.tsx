@@ -1,15 +1,13 @@
 import { useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { File, Paths } from 'expo-file-system';
 import { colors } from '@/constants/theme';
 import { parseAndValidateJson } from '@/llm/jsonParser';
 import { buildBriefCraftPrompt } from '@/llm/prompts/briefCraftPrompt';
 import { BriefCraftRawOutputSchema } from '@/types/schemas';
+import { NativeLlamaAdapter } from '@/llm/adapters/nativeLlamaAdapter';
 
 // Roadmap P1.2 feasibility check: real on-device inference, no network, no fixtures.
-// The model is copied to the app's private folder as MODEL_FILE (see docs/decisions/).
-const MODEL_FILE = 'model.gguf';
 const N_CTX = 2048;
 
 // Fictional demo conversation from ROADMAP.md section 10.
@@ -27,17 +25,21 @@ export default function AiCheckScreen() {
     setLines([]);
     let context: { release(): Promise<void> } | null = null;
     try {
-      const file = new File(Paths.document, MODEL_FILE);
-      if (!file.exists) {
-        log(`Model not found: ${MODEL_FILE} is missing from the app's private folder.`);
+      const adapter = new NativeLlamaAdapter({ nCtx: N_CTX });
+      const modelInfo = await adapter.getModelInfo();
+
+      if (!modelInfo.modelPath) {
+        log('Model not found: No .gguf model found in app storage.');
+        log('Go to Settings -> On-Device AI to import a .gguf model.');
         return;
       }
-      log(`Model file: ${(file.size / 1024 ** 3).toFixed(2)} GB`);
+      log(`Model file: ${modelInfo.modelFilename} (${modelInfo.fileSizeFormatted ?? 'unknown size'})`);
 
       const { initLlama } = await import('llama.rn');
       const loadStart = Date.now();
       log(`Loading (context ${N_CTX}, CPU only)...`);
-      const llama = await initLlama({ model: file.uri, n_ctx: N_CTX, n_gpu_layers: 0, use_mlock: false });
+      const cleanPath = modelInfo.modelPath.startsWith('file://') ? modelInfo.modelPath.slice(7) : modelInfo.modelPath;
+      const llama = await initLlama({ model: cleanPath, n_ctx: N_CTX, n_gpu_layers: 0, use_mlock: false });
       context = llama;
       log(`Loaded in ${((Date.now() - loadStart) / 1000).toFixed(1)} s`);
 
