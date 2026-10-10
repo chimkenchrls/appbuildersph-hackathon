@@ -386,6 +386,8 @@ html, body { background: ${colors.background}; color-scheme: dark; }
 .lp-facts > div { display: grid; gap: 4px; align-content: start; }
 .lp-fact-title { margin: 0; font-size: 1.0625rem; font-weight: 600; letter-spacing: -0.01em; }
 .lp-band .lp-body { color: color-mix(in srgb, var(--on-mint) 82%, transparent); }
+/* Links on the mint field use the dark ink; the usual mint link colour would vanish here. */
+.lp-band .lp-link { color: var(--on-mint); font-weight: 600; border-bottom-color: var(--on-mint); white-space: nowrap; }
 /* On mint, the focus ring switches to the dark ink so it stays visible. */
 .lp-band :focus-visible { outline-color: var(--on-mint); }
 .lp-footer { border-top: 1px solid var(--line); }

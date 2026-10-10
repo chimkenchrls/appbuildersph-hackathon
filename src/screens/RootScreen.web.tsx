@@ -10,6 +10,9 @@ import { StepTabs } from '@/components/landing/StepTabs';
 import { LANDING_CSS } from '@/components/landing/styles';
 import { StatusBadge } from '@/components/ui/StatusBadge';
 
+// The current Android test build, on Expo's build page. Update this when a new APK is built.
+const APK_URL = 'https://expo.dev/accounts/twilightdust/projects/owlset/builds/e82a4ed6-2a68-419b-bc18-57e382997d69';
+
 const SECTIONS = [
   { id: 'why', label: 'Why' },
   { id: 'demo', label: 'Demo' },
@@ -208,8 +211,8 @@ export default function RootScreen() {
               write change proposals.
             </p>
             <div className="lp-actions lp-rise" style={{ '--i': 4 } as CSSProperties}>
-              <a href="#demo" className="lp-btn lp-btn-primary" onClick={(event) => goTo(event, 'demo')}>
-                Try the demo
+              <a href={APK_URL} className="lp-btn lp-btn-primary" target="_blank" rel="noopener noreferrer">
+                Get APK
               </a>
               <a href="#how" className="lp-link" onClick={(event) => goTo(event, 'how')}>
                 See how it works
@@ -345,7 +348,12 @@ export default function RootScreen() {
                   <p className="lp-body">An installable APK. There is no store listing yet.</p>
                 </div>
               </div>
-              <p className="lp-body">OwlSet is in development. A download will be listed here when a release is available.</p>
+              <p className="lp-body">
+                OwlSet is in development. The current test build is available as an APK for Android.{' '}
+                <a href={APK_URL} className="lp-link" target="_blank" rel="noopener noreferrer">
+                  Get the APK
+                </a>
+              </p>
             </div>
           </div>
         </section>

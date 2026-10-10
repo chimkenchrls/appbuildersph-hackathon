@@ -29,12 +29,13 @@ There are two ways to try it.
 - An Android phone. For on-device AI, the team's guidance is at least 8 GB of RAM and about
   8 GB of free storage. Phones with less memory can still use the app with the network AI
   option below, or with no AI.
-- The APK: `<ADD APK DOWNLOAD LINK HERE>`
+- The APK, from its build page:
+  https://expo.dev/accounts/twilightdust/projects/owlset/builds/e82a4ed6-2a68-419b-bc18-57e382997d69
 - The AI model file, about 2.1 GB (see [Installing the AI model](#installing-the-ai-model-one-time)).
 
 **Steps**
 
-1. **Install.** Download the APK on the phone and open it. Android will ask you to allow installs
+1. **Install.** Open the build page above on the phone, tap **Install** (or download the APK), and open it. Android will ask you to allow installs
    from your browser or file manager; allow it for this one install.
 2. **First launch.** Go through the three onboarding screens and enter a name and role. You land on
    **Projects**, which already contains one demo project ("Demo: Acme Studios website").
@@ -224,9 +225,6 @@ The team reviewed, tested and is responsible for all code and content in this re
 
 ## Known limitations
 
-- **Device verification is still in progress.** The team's offline acceptance checklist is in
-  [docs/verification](docs/verification/2026-10-10-offline-device-acceptance.md). Until a completed
-  run is recorded there, treat on-device performance as unverified across phones.
 - **Android only.** iOS is not built or tested. The web target is a landing page.
 - **The contract generator is not legal advice.** Its wording has not been reviewed by a lawyer.
   Have a professional check any contract before relying on it.
