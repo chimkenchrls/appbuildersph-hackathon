@@ -284,7 +284,7 @@ Update this section while implementing. Keep it concise and include concrete evi
 
 ### Decisions to record
 
-- Repository location: https://github.com/chimkenchrls/diligentdev
+- Repository location: https://github.com/chimkenchrls/appbuildersph-hackathon
 - Demonstration device and OS: Nothing Phone 3a (Android, 8 GB RAM) for the APK. An iPhone 15 Pro Max with Expo Go is used for development testing.
 - Permitted model and quantization: Qwen3.5 9B, Q4_K_M (5.24 GB). Qwen3.5 4B (about 2.8 GB) is the fallback. The model is never bundled in the APK.
 - Model/runtime compatibility result: The model runs in LM Studio on a nearby computer, which the phone reaches over Wi-Fi (OpenAI-compatible API on port 1234). On-device inference with llama.rn 0.12.9 is installed and configured, but loading the model on the phone has not been tested.
