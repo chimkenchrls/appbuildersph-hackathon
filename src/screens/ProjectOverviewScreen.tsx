@@ -39,7 +39,7 @@ interface ProjectOverviewScreenProps {
   onSelectProject: (projectId: string) => void;
   onSelectAgreementVersion: (agreement: Agreement) => void;
   onNavigateToNewRequest: () => void;
-  onReviewRequest?: (request: ClientRequest) => void;
+  onReviewRequest?: (request: ClientRequest) => void | Promise<void>;
   onAcceptRequest?: (
     request: ClientRequest,
     additions: string[],
@@ -814,7 +814,10 @@ export function ProjectOverviewScreen({
                                   styles.reviewRequestBtn,
                                   pressed && styles.reviewRequestBtnPressed,
                                 ]}
-                                onPress={() => onReviewRequest(req)}
+                                onPress={async () => {
+                                  try { await onReviewRequest(req); }
+                                  catch (reason) { Alert.alert('Could not review request', reason instanceof Error ? reason.message : errorMessage(reason)); }
+                                }}
                                 accessibilityRole="button"
                                 accessibilityLabel="Review request & proposal"
                               >

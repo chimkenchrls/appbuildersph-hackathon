@@ -35,6 +35,7 @@ export class ScopeGuardService {
     projectId: string;
     agreementId: string;
     requestText: string;
+    requestId?: string;
   }): Promise<ScopeGuardAnalysis> {
     const { projectId, agreementId, requestText } = options;
     const trimmed = requestText.trim();
@@ -46,6 +47,11 @@ export class ScopeGuardService {
     if (!agreement || agreement.projectId !== projectId) {
       throw new Error(`Referenced agreement ${agreementId} was not found`);
     }
+
+    const existingRequest = options.requestId ? await this.scopeGuardRepo.getRequestById(options.requestId) : null;
+    if (options.requestId && (!existingRequest || existingRequest.projectId !== projectId
+      || existingRequest.agreementId !== agreementId || existingRequest.rawText !== trimmed)) throw new ServiceError('not_found');
+    if (existingRequest?.status === 'accepted') throw new ServiceError('conflict');
 
     const validRequirementIds = new Set(agreement.requirements.map((r) => r.id));
 
@@ -61,7 +67,7 @@ export class ScopeGuardService {
     const { classification, findings } = validateScopeGuardFindings(parsed.findings, validRequirementIds);
 
     const now = new Date().toISOString();
-    const requestId = `req_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
+    const requestId = existingRequest?.id ?? `req_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
     const analysisId = `ana_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`;
 
     // Persist analysis record
@@ -76,6 +82,7 @@ export class ScopeGuardService {
       createdAt: now,
     };
 
+    if (existingRequest) return this.scopeGuardRepo.createAnalysis(analysis);
     return this.scopeGuardRepo.createRequestWithAnalysis({ id: requestId, projectId, agreementId, rawText: trimmed, createdAt: now, status: 'stored' }, analysis);
   }
 

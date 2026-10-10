@@ -561,40 +561,43 @@ export function HomeScreen() {
     }
   };
 
-  const handleAnalyzeRequest = async (requestText: string) => {
-    if (!services || !activeProject) return;
+  const handleAnalyzeRequest = async (requestText: string, storedRequest?: ClientRequest) => {
+    if (!services || !activeProject) throw new Error(errorMessage(new ServiceError('not_found')));
+    const targetAgreement = storedRequest
+      ? await services.repositories.agreement.getById(storedRequest.agreementId)
+      : activeAgreement || activeAgreements[0];
+    if (!targetAgreement) throw new Error('Confirm your project scope before analyzing a request.');
+    setAnalysis(null);
+    setProposal(null);
 
     try {
-      const targetAgreement = activeAgreement || activeAgreements[0];
-      if (!targetAgreement) return;
-
       const newAnalysis = await services.services.scopeGuard.analyzeRequest({
         projectId: activeProject.id,
         agreementId: targetAgreement.id,
         requestText,
+        requestId: storedRequest?.id,
       });
-      setAnalysis(newAnalysis);
-
       // Generate proposal draft from findings
       const potentialItems = newAnalysis.findings
         .filter((f) => f.classification === 'potential_additional')
         .map((f) => f.item);
 
-      const newProposal = await services.services.changeDesk.draftProposal({
+      const newProposal = potentialItems.length ? await services.services.changeDesk.draftProposal({
         projectId: activeProject.id,
         analysisId: newAnalysis.id,
         selectedItems: potentialItems,
         freelancerFeeEstimate: 0,
         freelancerDaysEstimate: 0,
         currency: targetAgreement.budgetCurrency || 'PHP',
-      });
+      }) : null;
+      setAnalysis(newAnalysis);
       setProposal(newProposal);
+      if (newProposal) setProposalsMap(previous => ({ ...previous, [newAnalysis.id]: newProposal }));
 
       await refreshProjectRequests(activeProject.id);
       navigateToSubScreen('review', 'forward');
-    } catch {
-      // Offline fallback
-      navigateToSubScreen('review', 'forward');
+    } catch (reason) {
+      throw extractionFailure(reason);
     }
   };
 
@@ -708,15 +711,15 @@ export function HomeScreen() {
     }
   };
 
-  const handleReviewStoredRequest = (request: ClientRequest) => {
+  const handleReviewStoredRequest = async (request: ClientRequest) => {
     const matchedAnalysis = analysesMap[request.id];
-    if (matchedAnalysis) {
-      setAnalysis(matchedAnalysis);
-      const matchedProposal = proposalsMap[matchedAnalysis.id];
-      if (matchedProposal) {
-        setProposal(matchedProposal);
-      }
+    const matchedProposal = matchedAnalysis ? proposalsMap[matchedAnalysis.id] : null;
+    if (!matchedAnalysis || (!matchedProposal && matchedAnalysis.findings.some(f => f.classification === 'potential_additional'))) {
+      await handleAnalyzeRequest(request.rawText, request);
+      return;
     }
+    setAnalysis(matchedAnalysis);
+    setProposal(matchedProposal || null);
     navigateToSubScreen('review', 'forward');
   };
 

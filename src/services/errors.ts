@@ -20,7 +20,7 @@ export function errorMessage(error: unknown): string {
     save_failed: 'Could not save. Your changes are still here. Try saving again.',
     not_found: 'This record is unavailable in this project.',
     data_integrity: 'Saved data could not be verified. Your data has been kept; restore a verified backup or report this issue.',
-    conflict: 'This backup conflicts with saved data. Nothing was imported.',
+    conflict: 'Saved data changed or this action was already completed. Reopen the project and review the latest agreement before trying again.',
     invalid_input: 'Check the highlighted fields and try again.',
   };
   return messages[error.code];

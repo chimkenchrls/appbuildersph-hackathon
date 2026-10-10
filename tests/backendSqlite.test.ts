@@ -712,6 +712,24 @@ const reviewedDraft = (projectId: string) => ({
     } finally { await db.closeAsync(); }
   });
 
+  test('analysis of a stored request keeps its SQLite identity and never duplicates the message', async () => {
+    const { db, ports } = await realBackend(engine(JSON.stringify({ overall_classification: 'potential_additional', summary: 'New work',
+      findings: [{ item: 'Gallery', classification: 'potential_additional', explanation: 'New work', evidence_requirement_ids: [] }], clarification_questions: [] })));
+    try {
+      const service = new ScopeGuardService(ports.engine, ports.agreements as AgreementRepository, ports.scopeGuard as ScopeGuardRepository);
+      const saved = await service.saveRequest({ projectId: 'proj_demo_website_01', agreementId: 'agmt_demo_v1_01', requestText: 'Add a gallery' });
+      const before = await service.listRequests(saved.projectId);
+      const options = { projectId: saved.projectId, agreementId: saved.agreementId, requestId: saved.id, requestText: saved.rawText };
+      const analysis = await service.analyzeRequest(options);
+      expect(analysis.requestId).toBe(saved.id);
+      expect(await service.listRequests(saved.projectId)).toEqual(before);
+      expect(await new ScopeGuardRepository(db).getAnalysisByRequestId(saved.id)).toEqual(analysis);
+      await expect(service.analyzeRequest({ ...options, requestText: 'Different request' })).rejects.toMatchObject({ code: 'not_found' });
+      await new ScopeGuardRepository(db).updateRequestStatus(saved.id, 'accepted', new Date().toISOString());
+      await expect(service.analyzeRequest(options)).rejects.toMatchObject({ code: 'conflict' });
+    } finally { await db.closeAsync(); }
+  });
+
   test('legacy analysis service rolls back its request when analysis persistence fails', async () => {
     const { db, ports } = await realBackend(engine(JSON.stringify({ overall_classification: 'potential_additional', summary: 'Extra',
       findings: [{ item: 'Booking', classification: 'potential_additional', explanation: 'Extra', evidence_requirement_ids: [] }], clarification_questions: [] })));
