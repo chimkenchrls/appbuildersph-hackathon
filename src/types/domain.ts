@@ -2,7 +2,7 @@ export type Classification = 'included' | 'potential_additional' | 'needs_clarif
 
 export type RequirementCategory = 'deliverable' | 'term' | 'exclusion';
 
-export type ProposalStatus = 'draft' | 'copied' | 'sent' | 'accepted';
+export type ProposalStatus = 'draft' | 'copied' | 'sent';
 
 export type TaxTreatment =
   | 'net_of_withholding'

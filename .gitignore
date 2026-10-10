@@ -35,3 +35,8 @@ __pycache__/
 /.agents/skills/remotion-*/
 /.claude/skills/remotion-*
 /agent/skills/remotion-*/
+
+# Build and model binaries: share these by link or release, never in git
+*.apk
+*.aab
+*.gguf

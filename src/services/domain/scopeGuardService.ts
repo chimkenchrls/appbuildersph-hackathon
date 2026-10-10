@@ -37,21 +37,24 @@ export class ScopeGuardService {
     requestText: string;
     requestId?: string;
   }): Promise<ScopeGuardAnalysis> {
-    const { projectId, agreementId, requestText } = options;
-    const trimmed = requestText.trim();
-    if (!trimmed) {
-      throw new Error('Request text cannot be empty');
-    }
+    const { projectId, agreementId } = options;
+    const trimmed = textValue(options.requestText, limits.request);
 
     const agreement = await this.agreementRepo.getById(agreementId);
     if (!agreement || agreement.projectId !== projectId) {
-      throw new Error(`Referenced agreement ${agreementId} was not found`);
+      throw new ServiceError('not_found');
     }
 
     const existingRequest = options.requestId ? await this.scopeGuardRepo.getRequestById(options.requestId) : null;
     if (options.requestId && (!existingRequest || existingRequest.projectId !== projectId
       || existingRequest.agreementId !== agreementId || existingRequest.rawText !== trimmed)) throw new ServiceError('not_found');
     if (existingRequest?.status === 'accepted') throw new ServiceError('conflict');
+    // A request has one analysis. Asking again returns it instead of running the model again
+    // and failing on the stored record.
+    if (existingRequest) {
+      const previous = await this.scopeGuardRepo.getAnalysisByRequestId(existingRequest.id);
+      if (previous) return previous;
+    }
 
     const validRequirementIds = new Set(agreement.requirements.map((r) => r.id));
 

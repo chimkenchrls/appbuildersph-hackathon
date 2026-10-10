@@ -187,12 +187,17 @@ export class AgreementRepository {
     const checked = AgreementSchema.pick({ clientApprovedAt: true, clientSignatoryName: true, clientSignatureData: true })
       .safeParse({ clientApprovedAt: now, clientSignatoryName: name, clientSignatureData: signatureData ?? null });
     if (!checked.success) throw new ServiceError('invalid_input');
+    // Recorded approval is evidence of what the client agreed to. It is written once and is
+    // not replaced by a later call, including a double tap.
     const result = await this.db.runAsync(
       `UPDATE agreements
        SET client_approved_at = ?, client_signatory_name = ?, client_signature_data = ?
-       WHERE id = ?;`,
+       WHERE id = ? AND client_approved_at IS NULL;`,
       [now, name, checked.data.clientSignatureData ?? null, agreementId],
     );
-    if (!result.changes) throw new ServiceError('not_found');
+    if (!result.changes) {
+      const exists = await this.db.getFirstAsync<{ id: string }>('SELECT id FROM agreements WHERE id = ?;', [agreementId]);
+      throw new ServiceError(exists ? 'conflict' : 'not_found');
+    }
   }
 }

@@ -72,7 +72,7 @@ export default function RootScreen() {
     return () => observer.disconnect();
   }, []);
 
-  // Staged entry and the watermark fill: mark each section the first time it is seen.
+  // Staged entry: mark each section the first time it is seen.
   // The hidden starting state is switched on only here, so the page is complete without script.
   useEffect(() => {
     const root = scroller.current;
@@ -176,6 +176,7 @@ export default function RootScreen() {
       <header ref={header} className="lp-bar">
         <div className="lp-wrap lp-bar-row">
           <a href="#top" className="lp-brand" aria-label="OwlSet, back to top" onClick={(event) => goTo(event, 'top')}>
+            <img src="/logo.png" className="lp-brand-logo" alt="" width="48" height="32" />
             OwlSet
           </a>
           <nav ref={nav} className="lp-nav" aria-label="Sections">
@@ -288,9 +289,6 @@ export default function RootScreen() {
         </section>
 
         <section id="control" className="lp-section lp-control" data-reveal>
-          <span className="lp-control-mark" aria-hidden>
-            R1
-          </span>
           <div className="lp-wrap lp-control-grid">
             <div className="lp-control-main">
               <h2 className="lp-statement">You confirm, not the AI.</h2>
@@ -356,6 +354,7 @@ export default function RootScreen() {
       <footer className="lp-footer">
         <div className="lp-wrap lp-footer-row">
           <a href="#top" className="lp-brand lp-brand-sm" onClick={(event) => goTo(event, 'top')}>
+            <img src="/logo.png" className="lp-brand-logo" alt="" width="48" height="32" />
             OwlSet
           </a>
           <nav className="lp-footer-links" aria-label="Footer">

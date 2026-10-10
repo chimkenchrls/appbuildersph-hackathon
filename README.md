@@ -63,7 +63,9 @@ internet, including after you close and reopen OwlSet.
 3. Wait for it to finish. The file lands in the phone's **Downloads** folder as
    `qwen2.5-3b-instruct-q4_k_m.gguf`.
 
-You can also download it on a computer and copy it to the phone over USB. Any folder on the phone works.
+You can also download it on a computer and copy it to the phone over USB. Any folder on the phone
+works, but the file must be stored on the phone itself: a file that only exists in a cloud drive
+will not import.
 
 **Part 2: put the model inside OwlSet**
 
@@ -85,7 +87,12 @@ Good to know:
   room for two more copies. Once the import has succeeded you can delete the original from
   Downloads and get 2.1 GB back.
 - **The first answer is the slowest**, because the model has to load into memory. Later answers
-  in the same session are faster.
+  in the same session are faster. The team's guide is roughly 10 to 20 seconds per AI step on a
+  recent phone. "Analyze & draft proposal" makes two model calls, so it takes about twice that.
+- **Paste only the relevant messages.** Conversations over about 15,000 characters, and inputs too
+  long for the model, are refused with a message.
+- **A failed import does not remove a working model.** If an import stops for lack of space, the
+  model you already had stays active.
 - **Free Model RAM** in Settings unloads the model from memory without deleting it. Use it if the
   phone feels slow after testing.
 - **Uninstalling OwlSet deletes the imported model** along with the app's data.
@@ -156,7 +163,7 @@ To start again, use **Settings → Reset Workspace Baseline**.
 | --- | --- |
 | "The selected file is not a GGUF model" | The download is incomplete or the wrong file. Download it again; the finished file should be about 2.1 GB (2,104,932,768 bytes). |
 | "Not enough free storage to import this model" | The import needs room for its own copies of the file. Free up space so about 4.5 GB is available, then import again. |
-| The AI is very slow, or the app closes while it thinks | The phone is short on memory. Close other apps, tap **Free Model RAM** in Settings and try again, or switch to Network AI. |
+| The AI is very slow, or the app closes while it thinks | The phone is short on memory. Close other apps, tap **Free Model RAM** in Settings and try again. A smaller model (for example a 1.5B) uses less memory, or you can switch to Network AI. |
 | "This is too long for the on-device model" | The on-device context window is 2,048 tokens. Shorten the pasted conversation or request. |
 | LM Studio cannot be reached | Phone and computer must be on the same Wi‑Fi. Use the computer's LAN IP, not `localhost`. Enable "serve on local network" in LM Studio and allow it through the firewall. |
 | `npm ci` fails | Check `node --version`. The project needs Node.js 22. |
@@ -170,7 +177,7 @@ To start again, use **Settings → Reset Workspace Baseline**.
 | | |
 | --- | --- |
 | **Model** | Qwen2.5-3B-Instruct (about 3 billion parameters), by Alibaba Cloud's Qwen team |
-| **File used** | `qwen2.5-3b-instruct-q4_k_m.gguf`: GGUF format, 4-bit quantized (Q4_K_M), about 2.1 GB, imported by the user |
+| **File used** | `qwen2.5-3b-instruct-q4_k_m.gguf`: GGUF format, 4-bit quantized (Q4_K_M), about 2.1 GB, imported by the user. This is the model the team tested with. |
 | **Runtime** | [`llama.rn`](https://github.com/mybigday/llama.rn) (llama.cpp for React Native), on the phone's CPU, 2,048-token context |
 | **Where it runs** | On the device. Conversations, agreements and requests are not sent to any server. |
 | **Model licence** | Qwen Research License. Check its terms before any commercial use. |
@@ -265,8 +272,9 @@ Set `EXPO_PUBLIC_SAKLAW_FIXTURES=1` to run the screens on labelled in-memory dem
 AI output, with no database or model. Tests use the same fixtures.
 
 For LM Studio, set `EXPO_PUBLIC_LM_STUDIO_URL` to the server's `/v1` address and
-`EXPO_PUBLIC_LM_STUDIO_MODEL` to an ID listed by `/v1/models`. Explicit environment values override
-settings saved in the app. Restart Metro with `npx expo start --clear` after changing `.env`.
+`EXPO_PUBLIC_LM_STUDIO_MODEL` to an ID listed by `/v1/models`. For the server address, a value saved
+in Settings wins, then the build's `EXPO_PUBLIC_*` value, then the default saved on first launch.
+Restart Metro with `npx expo start --clear` after changing `.env`.
 
 ### Layout
 

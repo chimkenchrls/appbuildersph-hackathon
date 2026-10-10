@@ -6,6 +6,8 @@ import { ScopeGuardRepository } from './repositories/scopeGuardRepository';
 import { ProposalRepository } from './repositories/proposalRepository';
 import { SettingsRepository } from './repositories/settingsRepository';
 
+const DEMO_SEEDED_KEY = 'demo_workspace_seeded';
+
 /**
  * Seeds the demo project into an empty workspace. With `force`, the workspace is cleared first
  * (the Settings reset); clearing and seeding share one transaction, so a failure keeps the old data.
@@ -13,6 +15,7 @@ import { SettingsRepository } from './repositories/settingsRepository';
 export async function seedDemoDataAsync(db: SQLiteDatabase, force: boolean = false): Promise<boolean> {
   return transaction(db, async tx => {
     const projectRepo = new ProjectRepository(tx);
+    const settingsRepo = new SettingsRepository(tx);
 
     if (force) {
       // Children first, so no foreign key is left dangling.
@@ -22,20 +25,25 @@ export async function seedDemoDataAsync(db: SQLiteDatabase, force: boolean = fal
       await tx.runAsync('DELETE FROM requirements;');
       await tx.runAsync('DELETE FROM agreements;');
       await tx.runAsync('DELETE FROM projects;');
-    } else if ((await projectRepo.list()).length > 0) {
-      return false; // Database already has data, do not duplicate
+    } else {
+      // The demo is created once. After that, deleting every project must not bring it back.
+      if (await settingsRepo.get(DEMO_SEEDED_KEY)) return false;
+      if ((await projectRepo.list()).length > 0) {
+        await settingsRepo.set(DEMO_SEEDED_KEY, '1'); // data from an earlier version: never seed over it
+        return false;
+      }
     }
 
     const agreementRepo = new AgreementRepository(tx, true);
     const scopeGuardRepo = new ScopeGuardRepository(tx);
     const proposalRepo = new ProposalRepository(tx);
-    const settingsRepo = new SettingsRepository(tx);
 
-    // Set default LM Studio URL in settings if not configured
+    // Default LM Studio settings, only where the user has not already saved their own.
     const defaultUrl = process.env.EXPO_PUBLIC_LM_STUDIO_URL || 'http://10.0.2.2:1234/v1';
     const defaultModel = process.env.EXPO_PUBLIC_LM_STUDIO_MODEL || 'local-model';
-    await settingsRepo.set('lm_studio_url', defaultUrl);
-    await settingsRepo.set('lm_studio_model', defaultModel);
+    if (!(await settingsRepo.get('lm_studio_url'))) await settingsRepo.set('lm_studio_url', defaultUrl);
+    if (!(await settingsRepo.get('lm_studio_model'))) await settingsRepo.set('lm_studio_model', defaultModel);
+    await settingsRepo.set(DEMO_SEEDED_KEY, '1');
 
     const projectId = 'proj_demo_website_01';
     const agreementId = 'agmt_demo_v1_01';

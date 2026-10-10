@@ -497,6 +497,8 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.textPrimary,
     flex: 1,
+    // Lets a very long unbroken word shrink and truncate, so it cannot push the status badge out.
+    minWidth: 0,
     letterSpacing: -0.2,
     lineHeight: 22,
   },

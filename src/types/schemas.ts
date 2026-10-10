@@ -1,5 +1,24 @@
 import { z } from 'zod';
 
+const NOT_STATED = /^(?:null|none|n\/a|na|unknown|tbd|tba|to be (?:discussed|determined|confirmed|agreed)|not (?:stated|specified|set))$/i;
+
+/**
+ * Numbers from a model arrive as numbers or as text. Blank or "not stated" text means the value
+ * is unknown (null), never zero. Currency marks and thousands commas are accepted; any other
+ * text is treated as unknown rather than failing the whole answer. Negative numbers are rejected.
+ */
+function modelNumber(options: { integer: boolean }) {
+  return z.preprocess((value) => {
+    if (value === null || value === undefined) return null;
+    if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+    if (typeof value !== 'string') return null;
+    const text = value.trim().replace(/^(?:php|₱|\$|p)\s*/i, '').replace(/,/g, '').replace(/\s+/g, '');
+    if (!text || NOT_STATED.test(text)) return null;
+    if (!/^-?\d+(?:\.\d+)?$/.test(text)) return null;
+    return Number(text);
+  }, z.number().nonnegative().nullable().transform((n) => (n === null ? null : options.integer ? Math.round(n) : n)));
+}
+
 export const RequirementSchema = z.object({
   id: z.string().min(1),
   title: z.string().min(1),
@@ -38,14 +57,14 @@ export const BriefCraftRawOutputSchema = z.object({
     .default([]),
   budget: z
     .object({
-      amount: z.coerce.number().nullable().default(null),
+      amount: modelNumber({ integer: false }).default(null),
       currency: z.string().nullable().default('PHP'),
       notes: z.string().nullable().default(null),
     })
     .default({ amount: null, currency: 'PHP', notes: null }),
   timeline: z
     .object({
-      duration_days: z.coerce.number().nullable().default(null),
+      duration_days: modelNumber({ integer: true }).default(null),
       deadline: z.string().nullable().default(null),
       notes: z.string().nullable().default(null),
     })

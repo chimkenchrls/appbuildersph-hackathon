@@ -3,6 +3,7 @@ import { parseAndValidateJson } from '@/llm/jsonParser';
 import { buildBriefCraftPrompt } from '@/llm/prompts/briefCraftPrompt';
 import { BriefCraftRawOutputSchema } from '@/types/schemas';
 import type { ScopeDraft, Requirement, TaxTreatment } from '@/types/domain';
+import { findBudget, findDuration, findRevisionTerms } from '@/safety/conversationTerms';
 
 export class BriefCraftService {
   constructor(private readonly engine: LLMEngine) {}
@@ -93,50 +94,17 @@ export class BriefCraftService {
     const requirements: Requirement[] = [];
     let counter = 1;
 
-    // 1. Budget extraction (e.g. ₱15,000, ₱28,000, 15000 PHP, etc.)
-    let budgetAmount: number | null = null;
-    let budgetNotes: string | null = null;
-    const budgetMatch =
-      sourceText.match(/(?:[₱]|PHP|Php|\$)\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/i) ||
-      sourceText.match(/budget\s*(?:is|of|:)?\s*(?:[₱]|PHP|Php|\$)?\s*([0-9]{1,3}(?:,[0-9]{3})*|[0-9]+)/i);
+    // 1 to 3. Budget, delivery time and revision allowance. Each is read only when the
+    // conversation states it clearly; otherwise it stays null and is listed as missing.
+    const budget = findBudget(sourceText);
+    const budgetAmount: number | null = budget ? budget.amount : null;
+    const budgetNotes: string | null = budget ? budget.note : null;
 
-    if (budgetMatch && budgetMatch[1]) {
-      const num = parseInt(budgetMatch[1].replace(/,/g, ''), 10);
-      if (!isNaN(num)) {
-        budgetAmount = num;
-        budgetNotes = `Extracted from conversation: ₱${num.toLocaleString('en-US')}.`;
-      }
-    }
+    const duration = findDuration(sourceText);
+    const durationDays: number | null = duration ? duration.days : null;
+    const timelineNotes: string | null = duration ? duration.note : null;
 
-    // 2. Timeline extraction (e.g. 2 weeks, 3 weeks, 14 days, 30 days)
-    let durationDays: number | null = null;
-    let timelineNotes: string | null = null;
-    const timelineWeekMatch = sourceText.match(/(\d+)\s*weeks?/i);
-    const timelineDayMatch = sourceText.match(/(\d+)\s*days?/i);
-    const timelineMonthMatch = sourceText.match(/(\d+)\s*months?/i);
-
-    if (timelineWeekMatch && timelineWeekMatch[1]) {
-      const weeks = parseInt(timelineWeekMatch[1], 10);
-      durationDays = weeks * 7;
-      timelineNotes = `${weeks} week${weeks === 1 ? '' : 's'} turnaround.`;
-    } else if (timelineDayMatch && timelineDayMatch[1]) {
-      const days = parseInt(timelineDayMatch[1], 10);
-      durationDays = days;
-      timelineNotes = `${days} day${days === 1 ? '' : 's'} turnaround.`;
-    } else if (timelineMonthMatch && timelineMonthMatch[1]) {
-      const months = parseInt(timelineMonthMatch[1], 10);
-      durationDays = months * 30;
-      timelineNotes = `${months} month${months === 1 ? '' : 's'} turnaround.`;
-    }
-
-    // 3. Revision terms extraction (e.g. 2 rounds, two rounds)
-    let revisionTerms: string | null = null;
-    const revMatch = sourceText.match(/(\d+|one|two|three|four)\s*rounds?\s*(?:of\s*)?(?:design\s*)?revisions?/i);
-    if (revMatch && revMatch[1]) {
-      const val = revMatch[1].toLowerCase();
-      const count = val === 'one' ? 1 : val === 'two' ? 2 : val === 'three' ? 3 : val === 'four' ? 4 : parseInt(val, 10);
-      revisionTerms = `${count} round${count === 1 ? '' : 's'} of revisions included.`;
-    }
+    const revisionTerms: string | null = findRevisionTerms(sourceText);
 
     // 4. Deliverables extraction from actual sourceText
     const lines = sourceText.split('\n').map((l) => l.trim()).filter(Boolean);

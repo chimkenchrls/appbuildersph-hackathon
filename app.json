@@ -4,6 +4,7 @@
     "slug": "owlset",
     "scheme": "owlset",
     "version": "1.0.0",
+    "icon": "./assets/app-icon.png",
     "userInterfaceStyle": "light",
     "experiments": {
       "typedRoutes": true

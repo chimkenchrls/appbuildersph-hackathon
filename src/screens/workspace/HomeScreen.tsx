@@ -10,8 +10,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { initializeBackendAsync, type AppServices } from '@/services/domain/bootstrapService';
 import { KasunduanVaultService } from '@/services/domain/kasunduanVaultService';
 import { ServiceError, errorMessage, extractionFailure } from '@/services/errors';
-import { getDatabaseAsync } from '@/database/client';
-import { seedDemoDataAsync } from '@/database/seed';
+import { limits } from '@/safety/validation';
+import { notifyError } from '@/utils/notify';
+import { composeProposalMessage } from '@/safety/proposalMessage';
 import { colors } from '@/constants/theme';
 import { SlideTransition } from '@/components/workspace/SlideTransition';
 import { BottomNavBar, type RootTab } from '@/components/workspace/BottomNavBar';
@@ -42,6 +43,26 @@ type SubScreen =
   | 'new_request'
   | 'review'
   | 'proposal';
+
+/** The saved working draft that belongs to a project, or null when it has none or it cannot be read. */
+function draftOf(target: { draftScopeJson?: string | null } | undefined): ScopeDraft | null {
+  if (!target?.draftScopeJson) return null;
+  try {
+    return JSON.parse(target.draftScopeJson) as ScopeDraft;
+  } catch {
+    return null;
+  }
+}
+
+/** A failed write as a typed error, for screens that choose their own wording from its code. */
+function saveError(reason: unknown): ServiceError {
+  return reason instanceof ServiceError ? reason : new ServiceError('save_failed');
+}
+
+/** A failed write, as the message the user sees. */
+function saveFailure(reason: unknown): Error {
+  return new Error(errorMessage(saveError(reason)));
+}
 
 export function HomeScreen() {
   const [loading, setLoading] = useState(true);
@@ -163,48 +184,6 @@ export function HomeScreen() {
       isMounted = false;
     };
   }, []);
-
-  const refreshData = useCallback(async () => {
-    if (!services) return;
-    try {
-      const loadedProjects = await services.repositories.project.list();
-      const agreementsMap: Record<string, Agreement[]> = {};
-      const requestsMap: Record<string, ClientRequest[]> = {};
-      const analysesDict: Record<string, ScopeGuardAnalysis> = {};
-      const proposalsDict: Record<string, ChangeProposal> = {};
-
-      for (const proj of loadedProjects) {
-        const agmts = await services.repositories.agreement.listByProjectId(proj.id);
-        agreementsMap[proj.id] = agmts;
-
-        const reqs = await services.repositories.scopeGuard.listRequestsByProjectId(proj.id);
-        requestsMap[proj.id] = reqs;
-
-        const proAnalyses = await services.repositories.scopeGuard.listAnalysesByProjectId(proj.id);
-        for (const a of proAnalyses) {
-          analysesDict[a.requestId] = a;
-        }
-
-        const proProposals = await services.repositories.proposal.listByProjectId(proj.id);
-        for (const p of proProposals) {
-          proposalsDict[p.analysisId] = p;
-        }
-      }
-
-      setProjects(loadedProjects);
-      setProjectAgreements(agreementsMap);
-      setProjectRequests(requestsMap);
-      setAnalysesMap(analysesDict);
-      setProposalsMap(proposalsDict);
-
-      const storedName = await services.repositories.settings.get('freelancer_name');
-      const storedRole = await services.repositories.settings.get('freelancer_role');
-      if (storedName) setFreelancerName(storedName);
-      if (storedRole) setFreelancerRole(storedRole);
-    } catch {
-      // ignore
-    }
-  }, [services]);
 
   const refreshProjectRequests = useCallback(
     async (projectId: string) => {
@@ -338,14 +317,8 @@ export function HomeScreen() {
     const agmts = projectAgreements[projectId] || [];
     setSelectedAgreement(agmts[0] || null);
 
-    const targetProject = projects.find((p) => p.id === projectId);
-    if (targetProject?.draftScopeJson) {
-      try {
-        setActiveDraft(JSON.parse(targetProject.draftScopeJson));
-      } catch {
-        // ignore
-      }
-    }
+    // The draft in memory always belongs to the project being opened.
+    setActiveDraft(draftOf(projects.find((p) => p.id === projectId)));
     navigateToSubScreen('overview', 'forward');
   };
 
@@ -354,14 +327,8 @@ export function HomeScreen() {
     const agmts = projectAgreements[projectId] || [];
     setSelectedAgreement(agmts[0] || null);
 
-    const targetProject = projects.find((p) => p.id === projectId);
-    if (targetProject?.draftScopeJson) {
-      try {
-        setActiveDraft(JSON.parse(targetProject.draftScopeJson));
-      } catch {
-        // ignore
-      }
-    }
+    // The draft in memory always belongs to the project being opened.
+    setActiveDraft(draftOf(projects.find((p) => p.id === projectId)));
     navigateToSubScreen('overview', 'forward');
   };
 
@@ -375,6 +342,7 @@ export function HomeScreen() {
   ) => {
     setSelectedProjectId(projectId);
     setSelectedAgreement(agreement);
+    setActiveDraft(draftOf(projects.find((p) => p.id === projectId)));
     navigateToSubScreen('overview', 'forward');
   };
 
@@ -383,15 +351,12 @@ export function HomeScreen() {
     const project = projects.find((p) => p.id === projectId) || activeProject;
     if (!project) return;
 
-    let draftToRelease: ScopeDraft = defaultDraft;
-    if (activeDraft && project.id === activeProject.id) {
-      draftToRelease = activeDraft;
-    } else if (project.draftScopeJson) {
-      try {
-        draftToRelease = JSON.parse(project.draftScopeJson);
-      } catch {
-        draftToRelease = defaultDraft;
-      }
+    // Release exactly this project's own saved draft, never one left from another project.
+    const draftToRelease: ScopeDraft | null =
+      project.id === activeProject.id && activeDraft ? activeDraft : draftOf(project);
+    if (!draftToRelease) {
+      notifyError('Nothing to confirm', 'This project has no saved draft to confirm. Open it and add the deliverables first.');
+      return;
     }
 
     try {
@@ -406,21 +371,15 @@ export function HomeScreen() {
       setSelectedProjectId(project.id);
       setSelectedAgreement(newAgmt);
       navigateToSubScreen('overview', 'forward');
-    } catch {
-      // ignore
+    } catch (reason) {
+      notifyError('Could not confirm the scope', saveFailure(reason).message);
     }
   };
 
   const handleEditProjectDraft = (projectId: string) => {
     setSelectedProjectId(projectId);
     const project = projects.find((p) => p.id === projectId) || activeProject;
-    if (project?.draftScopeJson) {
-      try {
-        setActiveDraft(JSON.parse(project.draftScopeJson));
-      } catch {
-        // ignore
-      }
-    }
+    setActiveDraft(draftOf(project));
     setDraftReturnScreen('overview');
     navigateToSubScreen('draft', 'forward');
   };
@@ -440,6 +399,18 @@ export function HomeScreen() {
     );
     if (existingDuplicate) {
       throw new Error(`A project named "${data.projectName}" already exists.`);
+    }
+
+    // Only text can be read. A very long paste or a list of attachments with no text is refused
+    // here, before any model or fallback runs, and the user's text stays in the form.
+    const pasted = data.conversation.trim();
+    if (pasted.length > limits.source) {
+      throw new Error(
+        `This conversation is too long (${pasted.length.toLocaleString('en-US')} characters). The limit is ${limits.source.toLocaleString('en-US')}. Paste only the relevant messages.`,
+      );
+    }
+    if (!pasted.replace(/\[Attached [^\]]*\]/gi, '').trim()) {
+      throw new Error('Attached files cannot be read yet. Paste the text of the conversation or type the requirements.');
     }
 
     // The service answers with the model, or with its labelled rule-based extractor when no
@@ -509,8 +480,8 @@ export function HomeScreen() {
 
   const handleConfirmScope = async (draftToConfirm: ScopeDraft) => {
     if (!services || !activeProject) return;
+    // A failure is rethrown so the draft screen shows it and keeps the user's edits.
     try {
-      setCurrentDraftProjectId(null);
       // Update draftScopeJson in SQLite
       await services.repositories.project.update(activeProject.id, {
         draftScopeJson: JSON.stringify(draftToConfirm),
@@ -520,14 +491,15 @@ export function HomeScreen() {
         activeProject.id,
         draftToConfirm,
       );
+      setCurrentDraftProjectId(null);
       setProjectAgreements((prev) => ({
         ...prev,
         [activeProject.id]: [newAgmt, ...(prev[activeProject.id] || [])],
       }));
       setSelectedAgreement(newAgmt);
       navigateToSubScreen('overview', 'forward');
-    } catch {
-      navigateToSubScreen('overview', 'forward');
+    } catch (reason) {
+      throw saveError(reason);
     }
   };
 
@@ -556,8 +528,8 @@ export function HomeScreen() {
       if (subScreen === 'overview') {
         navigateToSubScreen(null, 'backward');
       }
-    } catch {
-      // ignore
+    } catch (reason) {
+      notifyError('Could not delete the project', saveFailure(reason).message);
     }
   };
 
@@ -577,19 +549,31 @@ export function HomeScreen() {
         requestText,
         requestId: storedRequest?.id,
       });
-      // Generate proposal draft from findings
+      // Generate proposal draft from findings, once per analysis. Fee and days stay unset until
+      // the freelancer enters them: an unset estimate is not zero.
       const potentialItems = newAnalysis.findings
         .filter((f) => f.classification === 'potential_additional')
         .map((f) => f.item);
 
-      const newProposal = potentialItems.length ? await services.services.changeDesk.draftProposal({
-        projectId: activeProject.id,
-        analysisId: newAnalysis.id,
-        selectedItems: potentialItems,
-        freelancerFeeEstimate: 0,
-        freelancerDaysEstimate: 0,
-        currency: targetAgreement.budgetCurrency || 'PHP',
-      }) : null;
+      let newProposal: ChangeProposal | null =
+        (await services.repositories.proposal.listByProjectId(activeProject.id))
+          .find((p) => p.analysisId === newAnalysis.id) ?? null;
+      if (!newProposal && potentialItems.length) {
+        try {
+          newProposal = await services.services.changeDesk.draftProposal({
+            projectId: activeProject.id,
+            analysisId: newAnalysis.id,
+            selectedItems: potentialItems,
+            freelancerFeeEstimate: null,
+            freelancerDaysEstimate: null,
+            currency: targetAgreement.budgetCurrency || 'PHP',
+          });
+        } catch (reason) {
+          // The analysis is already saved; show it in the list so a retry only drafts the proposal.
+          await refreshProjectRequests(activeProject.id);
+          throw reason;
+        }
+      }
       setAnalysis(newAnalysis);
       setProposal(newProposal);
       if (newProposal) setProposalsMap(previous => ({ ...previous, [newAnalysis.id]: newProposal }));
@@ -696,8 +680,8 @@ export function HomeScreen() {
       if (selectedAgreement?.id === agreementId) {
         setSelectedAgreement(updatedAgmt);
       }
-    } catch {
-      // ignore
+    } catch (reason) {
+      throw saveError(reason);
     }
   };
 
@@ -706,8 +690,8 @@ export function HomeScreen() {
     try {
       await services.services.scopeGuard.deleteRequest(requestId);
       await refreshProjectRequests(activeProject.id);
-    } catch {
-      // ignore
+    } catch (reason) {
+      notifyError('Could not delete the request', saveFailure(reason).message);
     }
   };
 
@@ -721,6 +705,73 @@ export function HomeScreen() {
     setAnalysis(matchedAnalysis);
     setProposal(matchedProposal || null);
     navigateToSubScreen('review', 'forward');
+  };
+
+  /** Opens the proposal for the analysis on screen, creating its draft first if it has none. */
+  const handleProceedToProposal = async () => {
+    if (!services || !activeProject || !analysis) {
+      notifyError('Nothing to propose', 'Check a request first.');
+      return;
+    }
+    const additions = analysis.findings
+      .filter((f) => f.classification === 'potential_additional')
+      .map((f) => f.item);
+    if (!additions.length) {
+      notifyError(
+        'No additional work to propose',
+        'This request looks covered by the confirmed scope, or it needs clarifying first. A change proposal is for work that goes beyond the scope.',
+      );
+      return;
+    }
+    if (!proposal || proposal.analysisId !== analysis.id) {
+      try {
+        const now = new Date().toISOString();
+        const currency = activeAgreement?.budgetCurrency || 'PHP';
+        const created = await services.repositories.proposal.create({
+          id: `prop_${Date.now()}_${Math.random().toString(36).substring(2, 8)}`,
+          projectId: activeProject.id,
+          analysisId: analysis.id,
+          selectedItems: additions,
+          freelancerFeeEstimate: null,
+          freelancerDaysEstimate: null,
+          currency,
+          draftMessage: composeProposalMessage('Please review the proposed additions to our recorded scope.', {
+            deliverables: additions, feeAmount: null, currency, extraWorkingDays: null,
+          }),
+          status: 'draft',
+          createdAt: now,
+          updatedAt: now,
+        });
+        setProposal(created);
+        setProposalsMap((previous) => ({ ...previous, [analysis.id]: created }));
+      } catch (reason) {
+        notifyError('Could not prepare the proposal', saveFailure(reason).message);
+        return;
+      }
+    }
+    navigateToSubScreen('proposal', 'forward');
+  };
+
+  /** Saves the editor's proposal. A failure is thrown so the editor shows it; nothing pretends to be saved. */
+  const handleSaveProposal = async (updatedProp: ChangeProposal) => {
+    if (!services) throw saveError(new ServiceError('not_found'));
+    try {
+      const existing = await services.repositories.proposal.getById(updatedProp.id);
+      const saved = existing
+        ? await services.repositories.proposal.update(updatedProp.id, {
+            selectedItems: updatedProp.selectedItems,
+            draftMessage: updatedProp.draftMessage,
+            freelancerFeeEstimate: updatedProp.freelancerFeeEstimate,
+            freelancerDaysEstimate: updatedProp.freelancerDaysEstimate,
+            status: updatedProp.status,
+          })
+        : await services.repositories.proposal.create(updatedProp);
+      if (!saved) throw new ServiceError('save_failed');
+      setProposal(saved);
+      setProposalsMap((previous) => ({ ...previous, [saved.analysisId]: saved }));
+    } catch (reason) {
+      throw saveError(reason);
+    }
   };
 
   const handleAcceptProposalFromScreen = async (
@@ -741,13 +792,8 @@ export function HomeScreen() {
   };
 
   const handleDataReset = async () => {
-    try {
-      const db = await getDatabaseAsync();
-      await seedDemoDataAsync(db, true);
-    } catch {
-      // ignore
-    }
-    await refreshData();
+    // Resetting would erase confirmed agreements, which are meant to stay. It is turned off.
+    throw new Error('Workspace reset is turned off to protect your confirmed agreements.');
   };
 
   const handleCompleteOnboarding = async (profile: { name: string; role: string }) => {
@@ -873,7 +919,7 @@ export function HomeScreen() {
                 }
               }
               onBack={() => navigateToSubScreen('new_request', 'backward')}
-              onProceedToProposal={() => navigateToSubScreen('proposal', 'forward')}
+              onProceedToProposal={() => void handleProceedToProposal()}
             />
           )}
 
@@ -902,30 +948,11 @@ export function HomeScreen() {
                   ? analysis.findings
                       .filter((f) => f.classification === 'potential_additional')
                       .map((f) => f.item)
-                  : ['Customer accounts', 'Appointment booking']
+                  : proposal?.selectedItems ?? []
               }
               onBack={() => navigateToSubScreen('review', 'backward')}
               onAcceptProposal={handleAcceptProposalFromScreen}
-              onSaveProposal={async (updatedProp) => {
-                if (services) {
-                  try {
-                    const existing = await services.repositories.proposal.getById(updatedProp.id);
-                    if (existing) {
-                      await services.repositories.proposal.update(updatedProp.id, {
-                        draftMessage: updatedProp.draftMessage,
-                        freelancerFeeEstimate: updatedProp.freelancerFeeEstimate,
-                        freelancerDaysEstimate: updatedProp.freelancerDaysEstimate,
-                        status: updatedProp.status,
-                      });
-                    } else {
-                      await services.repositories.proposal.create(updatedProp);
-                    }
-                  } catch {
-                    // Fallback update in state
-                  }
-                }
-                setProposal(updatedProp);
-              }}
+              onSaveProposal={handleSaveProposal}
             />
           )}
 

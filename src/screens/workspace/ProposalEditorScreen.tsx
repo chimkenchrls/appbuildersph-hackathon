@@ -130,13 +130,17 @@ export function ProposalEditorScreen({
   const handleCopyMessage = async () => {
     try {
       await Clipboard.setStringAsync(draftMessage);
-      await hapticSuccess();
-      setFeedback('Proposal copied to clipboard!');
-      if (onSaveProposal) {
-        await onSaveProposal({ ...updatedProposal(), status: 'copied' });
-      }
     } catch {
       setFeedback('Unable to copy to clipboard.');
+      return;
+    }
+    await hapticSuccess();
+    try {
+      if (onSaveProposal) await onSaveProposal({ ...updatedProposal(), status: 'copied' });
+      setFeedback('Proposal copied to clipboard!');
+    } catch (reason) {
+      // The text is on the clipboard; only recording that it was copied failed.
+      setFeedback(`Copied, but the proposal was not saved. ${errorMessage(reason)}`);
     }
   };
 

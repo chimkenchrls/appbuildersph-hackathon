@@ -6,6 +6,9 @@ import { colors } from '@/constants/theme';
 import { ProjectOverviewScreen } from '@/screens/workspace/ProjectOverviewScreen';
 import { ProposalEditorScreen } from '@/screens/workspace/ProposalEditorScreen';
 import { ScopeDraftScreen } from '@/screens/workspace/ScopeDraftScreen';
+import { ProjectsScreen } from '@/screens/workspace/ProjectsScreen';
+import { AgreementsScreen } from '@/screens/workspace/AgreementsScreen';
+import { NewRequestScreen } from '@/screens/workspace/NewRequestScreen';
 import { ScopeReviewScreen } from '@/screens/workspace/ScopeReviewScreen';
 import type { Agreement, ChangeProposal, ClientRequest, Project, ScopeDraft, ScopeGuardAnalysis } from '@/types/domain';
 
@@ -16,7 +19,7 @@ import type { Agreement, ChangeProposal, ClientRequest, Project, ScopeDraft, Sco
  */
 const NOW = '2026-10-08T09:30:00.000Z';
 
-const project: Project = {
+const baseProject: Project = {
   id: 'proj_demo_cafe',
   title: 'Café Amihan website',
   clientName: 'Café Amihan (Rina)',
@@ -31,8 +34,8 @@ const requirements = [
   { id: 'R3', title: 'Two revision rounds', description: 'Two rounds of revisions during design and staging.', category: 'term' as const },
 ];
 
-const draft: ScopeDraft = {
-  title: project.title,
+const baseDraft: ScopeDraft = {
+  title: baseProject.title,
   requirements,
   budgetAmount: 15000,
   budgetCurrency: 'PHP',
@@ -47,10 +50,10 @@ const draft: ScopeDraft = {
   extractedWithAi: true,
 };
 
-const agreement: Agreement = {
-  ...draft,
+const baseAgreement: Agreement = {
+  ...baseDraft,
   id: 'agmt_demo_cafe_v1',
-  projectId: project.id,
+  projectId: baseProject.id,
   versionNumber: 1,
   title: 'Café Amihan website, Agreement v1',
   confirmedAt: NOW,
@@ -59,8 +62,8 @@ const agreement: Agreement = {
 
 const request: ClientRequest = {
   id: 'req_demo_cafe_1',
-  projectId: project.id,
-  agreementId: agreement.id,
+  projectId: baseProject.id,
+  agreementId: baseAgreement.id,
   rawText: 'Can we add customer accounts with login, swap the hero photo, and make sure the Menu page works on phones?',
   createdAt: NOW,
   status: 'analyzed',
@@ -69,7 +72,7 @@ const request: ClientRequest = {
 const analysis: ScopeGuardAnalysis = {
   id: 'ana_demo_cafe_1',
   requestId: request.id,
-  agreementId: agreement.id,
+  agreementId: baseAgreement.id,
   classification: 'potential_additional',
   summary: 'One item looks like additional work, one needs a decision, and one is already covered.',
   findings: [
@@ -98,7 +101,7 @@ const analysis: ScopeGuardAnalysis = {
 
 const proposal: ChangeProposal = {
   id: 'prop_demo_cafe_1',
-  projectId: project.id,
+  projectId: baseProject.id,
   analysisId: analysis.id,
   selectedItems: ['Customer accounts with login'],
   freelancerFeeEstimate: 7000,
@@ -109,6 +112,26 @@ const proposal: ChangeProposal = {
   status: 'draft',
   createdAt: NOW,
   updatedAt: NOW,
+};
+
+// Stress data for layout checks: ?data=worst or ?data=empty on the capture route.
+const LONG = 'Extraordinarily long deliverable name that keeps going and going without any natural break so the layout has to cope';
+const UNBROKEN = 'averyveryveryveryveryverylongunbrokenwordwithnospacesatallthatcannotwrapnaturally1234567890';
+const worstRequirements = Array.from({ length: 40 }, (_, index) => ({
+  id: `REQ-${String(index + 1).padStart(2, '0')}`,
+  title: index % 3 === 0 ? `${LONG} ${index}` : index % 3 === 1 ? `${UNBROKEN}${index}` : `Café 🦉 ${index} 日本語のテスト`,
+  description: `${LONG}. ${LONG}.`,
+  category: 'deliverable' as const,
+}));
+const worst = {
+  project: { ...baseProject, title: `${LONG} ${UNBROKEN}`, clientName: UNBROKEN, description: LONG },
+  draft: { ...baseDraft, title: `${LONG}`, requirements: worstRequirements, budgetAmount: 999999999999, durationDays: 99999,
+    timelineNotes: LONG, revisionTerms: LONG, missingInformation: [LONG, UNBROKEN], exclusions: [LONG, UNBROKEN] },
+};
+const empty = {
+  project: { ...baseProject, title: 'Untitled', clientName: null, description: null },
+  draft: { ...baseDraft, requirements: [], budgetAmount: null, durationDays: null, timelineNotes: null, revisionTerms: null,
+    missingInformation: [], exclusions: [] },
 };
 
 const noop = () => undefined;
@@ -123,7 +146,13 @@ function Frame({ children }: { children: React.ReactNode }) {
 }
 
 export function CaptureScreen() {
-  const { screen } = useLocalSearchParams<{ screen?: string }>();
+  const { screen, data } = useLocalSearchParams<{ screen?: string; data?: string }>();
+  const set = data === 'worst' ? worst : data === 'empty' ? empty : null;
+  const project = set ? set.project : baseProject;
+  const draft = set ? set.draft : baseDraft;
+  const agreement: Agreement = set
+    ? { ...baseAgreement, ...set.draft, id: baseAgreement.id, projectId: baseProject.id, versionNumber: 1, title: set.project.title, confirmedAt: NOW, clientApprovedAt: null }
+    : baseAgreement;
 
   switch (screen) {
     case 'draft':
@@ -169,6 +198,32 @@ export function CaptureScreen() {
             onBack={noop}
             onSaveProposal={asyncNoop}
           />
+        </Frame>
+      );
+    case 'projects':
+      return (
+        <Frame>
+          <ProjectsScreen
+            projects={data === 'empty' ? [] : [project, { ...project, id: 'proj_two', title: 'Second 🦉 project' }]}
+            projectAgreements={data === 'empty' ? {} : { [project.id]: [agreement] }}
+            onSelectProject={noop} onViewProjectOverview={noop} onNewProject={noop}
+          />
+        </Frame>
+      );
+    case 'agreements':
+      return (
+        <Frame>
+          <AgreementsScreen
+            projects={data === 'empty' ? [] : [project]}
+            projectAgreements={data === 'empty' ? {} : { [project.id]: [agreement] }}
+            onSelectProjectAgreement={noop} onNewProject={noop}
+          />
+        </Frame>
+      );
+    case 'newrequest':
+      return (
+        <Frame>
+          <NewRequestScreen project={project} agreement={agreement} onBack={noop} onAnalyze={asyncNoop} onSaveRequest={asyncNoop} onViewConfirmedScope={noop} />
         </Frame>
       );
     default:
